@@ -17,6 +17,7 @@ import {
 import { formatNaira, nairaToKobo } from '@estene/contracts/money';
 import { AdminCreateShipmentSchema, type ShipmentDto } from '@estene/contracts/shipment';
 import type { ZoneDto } from '@estene/contracts/zone';
+import type { CheckoutSession, TransactionDto } from '@estene/contracts/payment';
 import type { QuoteLine } from '@estene/contracts/pricing';
 import { NigerianPhoneSchema } from '@estene/contracts/common';
 import { cn, humanize } from '@estene/lib/utils';
@@ -33,13 +34,21 @@ import { useClientOptions } from '../clients/clients.queries';
 import { useZones } from '../zones/zones.queries';
 import { AreaSelect } from './components/AreaSelect';
 
+/** The booking response carries payment details for prepaid methods. */
+type BookedShipment = ShipmentDto & {
+  payment: { transfer?: TransactionDto; checkout?: CheckoutSession } | null;
+};
+
 type FormIn = z.input<typeof AdminCreateShipmentSchema>;
 type FormOut = z.output<typeof AdminCreateShipmentSchema>;
 type Form = UseFormReturn<FormIn, unknown, FormOut>;
 
-/** Staff can't take card payments over the phone; businesses can also be invoiced. */
+/**
+ * Staff can't take card details over the phone: `online` texts the caller a pay
+ * link, `transfer` gives an account number to read out. Businesses can be invoiced.
+ */
 const PAYMENT_OPTIONS: Record<'individual' | 'client', PaymentMethod[]> = {
-  individual: ['cash_on_pickup', 'cash_on_delivery', 'transfer'],
+  individual: ['transfer', 'online', 'cash_on_pickup', 'cash_on_delivery'],
   client: ['on_account', 'cash_on_pickup', 'cash_on_delivery'],
 };
 
@@ -101,12 +110,25 @@ export default function NewShipmentPage() {
   }, [selectedClient?.id]);
 
   const book = useMutation({
-    mutationFn: (body: FormOut) => api.post<ShipmentDto>('/shipments', body),
+    mutationFn: (body: FormOut) => api.post<BookedShipment>('/shipments', body),
     onSuccess: (shipment) => {
-      toast.success(`Booked ${shipment.trackingNumber}`, {
-        description:
-          'Dispatch is finding a rider. The sender gets an SMS with the tracking number.',
-      });
+      const account = shipment.payment?.transfer?.virtualAccount;
+      if (account) {
+        // Read this out to the caller — it's also on the shipment page and in their SMS.
+        toast.success(`Booked ${shipment.trackingNumber} — awaiting transfer`, {
+          description: `Ask them to send ${formatNaira(shipment.payment!.transfer!.amount)} to ${account.accountNumber} (${account.bankName}). A rider is dispatched once it lands.`,
+          duration: 20_000,
+        });
+      } else if (shipment.payment?.checkout) {
+        toast.success(`Booked ${shipment.trackingNumber} — pay link sent`, {
+          description: 'The caller got an SMS to pay online. A rider is dispatched once they pay.',
+        });
+      } else {
+        toast.success(`Booked ${shipment.trackingNumber}`, {
+          description:
+            'Dispatch is finding a rider. The sender gets an SMS with the tracking number.',
+        });
+      }
       navigate(`/shipments/${shipment.id}`);
     },
   });

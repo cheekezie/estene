@@ -2,11 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Building2, Camera, KeyRound, MapPin, Phone, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  PARCEL_SIZE_META,
-  PAYMENT_METHOD_LABELS,
-  SERVICE_LEVEL_META,
-} from '@estene/contracts/enums';
+import { PARCEL_SIZE_META, SERVICE_LEVEL_META } from '@estene/contracts/enums';
 import { formatNaira } from '@estene/contracts/money';
 import { isTerminal } from '@estene/contracts/shipment-status';
 import type { StopDto } from '@estene/contracts/shipment';
@@ -21,10 +17,8 @@ import { ReasonDialog } from '@/shared/components/ReasonDialog';
 import { useCan } from '@/shared/hooks/useCan';
 import { AssignRiderDialog } from './components/AssignRiderDialog';
 import { ShipmentTimeline } from './components/ShipmentTimeline';
-import { useCancelShipment, useMarkPaid, useShipment, useUnassignRider } from './shipments.queries';
-
-/** Cash is marked paid automatically when the rider collects it. */
-const CASH_METHODS: string[] = ['cash_on_pickup', 'cash_on_delivery'];
+import { ShipmentPaymentsCard } from '../payments/components/ShipmentPaymentsCard';
+import { useCancelShipment, useShipment, useUnassignRider } from './shipments.queries';
 
 const SOURCE_LABEL = { web: 'website', admin: 'phone booking', api: 'API' } as const;
 
@@ -36,7 +30,6 @@ export default function ShipmentDetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const cancel = useCancelShipment(id);
   const unassign = useUnassignRider(id);
-  const markPaid = useMarkPaid(id);
   const o = q.data;
 
   return (
@@ -168,14 +161,6 @@ export default function ShipmentDetailPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Charges</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={o.paymentStatus === 'paid' ? 'success' : 'warning'}>
-                        {humanize(o.paymentStatus)}
-                      </Badge>
-                      <span className="text-muted-foreground text-xs">
-                        {PAYMENT_METHOD_LABELS[o.paymentMethod]}
-                      </span>
-                    </div>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     {o.estimate.lines.map((l) => (
@@ -199,26 +184,10 @@ export default function ShipmentDetailPage() {
                         )}
                       </div>
                     )}
-                    {o.paymentStatus === 'unpaid' &&
-                      !CASH_METHODS.includes(o.paymentMethod) &&
-                      can('finance') &&
-                      !['cancelled', 'returned'].includes(o.status) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          loading={markPaid.isPending}
-                          onClick={() =>
-                            markPaid.mutate(undefined, {
-                              onSuccess: () => toast.success('Payment recorded'),
-                            })
-                          }
-                        >
-                          Mark as paid
-                        </Button>
-                      )}
                   </CardContent>
                 </Card>
+
+                <ShipmentPaymentsCard shipment={o} />
               </div>
 
               <div className="space-y-6">

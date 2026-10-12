@@ -14,6 +14,7 @@ import { useCan } from '@/shared/hooks/useCan';
 import { useZones } from '../zones/zones.queries';
 import { useShipments } from '../shipments/shipments.queries';
 import { RIDER_STATUS_TONE } from './RidersPage';
+import { RiderEarningsCard } from '../payouts/components/RiderEarningsCard';
 import { useRider, useSetRiderStatus } from './riders.queries';
 
 export default function RiderDetailPage() {
@@ -88,50 +89,55 @@ export default function RiderDetailPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <Row label="Vehicle">
-                    {humanize(r.vehicleType)}
-                    {r.plateNumber && ` · ${r.plateNumber}`}
-                  </Row>
-                  <Row label="Primary zone">{r.primaryZone?.name ?? '—'}</Row>
-                  <Row label="Coverage">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      {r.coverageZoneIds.map((z) => (
-                        <Badge key={z} tone="info">
-                          {zoneName(z)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Row>
-                  {r.type === 'partner' && (
-                    <Row label="Commission">
-                      {r.commissionPct != null ? `${r.commissionPct}%` : 'Platform default'}
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Profile</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <Row label="Vehicle">
+                      {humanize(r.vehicleType)}
+                      {r.plateNumber && ` · ${r.plateNumber}`}
                     </Row>
-                  )}
-                  <Row label="Active jobs">{r.activeJobs}</Row>
-                  <Row label="Last seen">
-                    {r.lastLocation ? (
-                      <a
-                        className="text-primary inline-flex items-center gap-1 hover:underline"
-                        target="_blank"
-                        rel="noreferrer"
-                        href={`https://maps.google.com/?q=${r.lastLocation.lat},${r.lastLocation.lng}`}
-                      >
-                        <MapPin className="size-3.5" />
-                        {timeAgo(new Date(r.lastLocation.at))}
-                      </a>
-                    ) : (
-                      '—'
+                    <Row label="Primary zone">{r.primaryZone?.name ?? '—'}</Row>
+                    <Row label="Coverage">
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {r.coverageZoneIds.map((z) => (
+                          <Badge key={z} tone="info">
+                            {zoneName(z)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </Row>
+                    {r.type === 'partner' && (
+                      <Row label="Commission">
+                        {r.commissionPct != null ? `${r.commissionPct}%` : 'Platform default'}
+                      </Row>
                     )}
-                  </Row>
-                </CardContent>
-              </Card>
+                    <Row label="Active jobs">{r.activeJobs}</Row>
+                    <Row label="Last seen">
+                      {r.lastLocation ? (
+                        <a
+                          className="text-primary inline-flex items-center gap-1 hover:underline"
+                          target="_blank"
+                          rel="noreferrer"
+                          href={`https://maps.google.com/?q=${r.lastLocation.lat},${r.lastLocation.lng}`}
+                        >
+                          <MapPin className="size-3.5" />
+                          {timeAgo(new Date(r.lastLocation.at))}
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                    </Row>
+                  </CardContent>
+                </Card>
+                {can('finance') && (
+                  <RiderEarningsCard riderId={r.id} riderName={`${r.firstName} ${r.lastName}`} />
+                )}
+              </div>
 
-              <Card className="lg:col-span-2">
+              <Card className="lg:col-span-2 lg:self-start">
                 <CardHeader>
                   <CardTitle>Recent jobs</CardTitle>
                 </CardHeader>

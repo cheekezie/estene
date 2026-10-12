@@ -46,6 +46,8 @@ const router = createBrowserRouter([
           { path: 'tags', ...page(() => import('@/features/tags/TagsPage')) },
           { path: 'pricing', ...page(() => import('@/features/pricing/PricingPage')) },
           { path: 'finance', ...page(() => import('@/features/finance/FinancePage')) },
+          { path: 'transactions', ...page(() => import('@/features/payments/TransactionsPage')) },
+          { path: 'payouts', ...page(() => import('@/features/payouts/RiderPayoutsPage')) },
           { path: 'staff', ...page(() => import('@/features/staff/StaffPage')) },
         ],
       },

@@ -5,6 +5,10 @@ import type {
   QuoteRequest,
 } from '@estene/contracts/shipment';
 import type { QuoteLine } from '@estene/contracts/pricing';
+import type { CheckoutSession, TransactionDto } from '@estene/contracts/payment';
+
+/** Prepaid bookings come back with either a hosted checkout or an account number to pay into. */
+export type PaymentStart = { checkout?: CheckoutSession; transfer?: TransactionDto };
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 
@@ -54,10 +58,34 @@ export const publicApi = {
       body: JSON.stringify(body),
     }),
   book: (body: CreateShipmentInput) =>
-    request<{ id: string; trackingNumber: string; estimate: { total: number } }>(
-      '/public/shipments',
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
+    request<{
+      id: string;
+      trackingNumber: string;
+      status: string;
+      estimate: { total: number };
+      payment: PaymentStart | null;
+    }>('/public/shipments', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  /** Pay what's owed on a shipment from the tracking page. */
+  pay: (trackingNumber: string, channel: 'checkout' | 'transfer') =>
+    request<PaymentStart>(`/public/track/${encodeURIComponent(trackingNumber)}/pay`, {
+      method: 'POST',
+      body: JSON.stringify({ channel }),
+    }),
+  /** Re-checks a payment with the gateway after the shopper returns from checkout. */
+  verifyPayment: (reference: string) =>
+    request<{
+      reference: string;
+      status: 'pending' | 'success' | 'failed' | 'expired';
+      amount?: number;
+      trackingNumber?: string;
+      shipmentStatus?: string;
+    }>(`/public/payments/${encodeURIComponent(reference)}/verify`, {
+      method: 'POST',
+      cache: 'no-store',
+    }),
   track: (tn: string) =>
     request<PublicTrackingDto>(`/public/track/${encodeURIComponent(tn)}`, { cache: 'no-store' }),
 };

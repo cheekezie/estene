@@ -57,5 +57,3 @@ export const useUnassignRider = (id: string) =>
   );
 export const useCancelShipment = (id: string) =>
   useShipmentAction((note?: string) => api.post<ShipmentDto>(`/shipments/${id}/cancel`, { note }));
-export const useMarkPaid = (id: string) =>
-  useShipmentAction(() => api.post<ShipmentDto>(`/shipments/${id}/mark-paid`));

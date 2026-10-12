@@ -3,6 +3,8 @@ import {
   Banknote,
   Bike,
   Building2,
+  HandCoins,
+  Receipt,
   LayoutDashboard,
   Map,
   Package,
@@ -34,8 +36,15 @@ export const NAV_SECTIONS: { title?: string; items: NavItem[] }[] = [
     items: [
       { label: 'Business clients', to: '/clients', icon: Building2 },
       { label: 'Pricing', to: '/pricing', icon: Tags },
-      { label: 'Finance', to: '/finance', icon: Banknote, roles: ['finance'] },
       { label: 'Staff', to: '/staff', icon: Users, roles: [] },
+    ],
+  },
+  {
+    title: 'Money',
+    items: [
+      { label: 'Finance', to: '/finance', icon: Banknote, roles: ['finance'] },
+      { label: 'Transactions', to: '/transactions', icon: Receipt, roles: ['finance', 'support'] },
+      { label: 'Rider payouts', to: '/payouts', icon: HandCoins, roles: ['finance'] },
     ],
   },
 ];

@@ -45,7 +45,7 @@ export const EMPTY_DRAFT: BookingDraft = {
   dropoffLandmark: '',
   senderEmail: '',
   notes: '',
-  paymentMethod: 'cash_on_pickup',
+  paymentMethod: 'online',
 };
 
 export const splitSlot = (slot: string) => {

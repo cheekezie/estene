@@ -7,6 +7,7 @@ import type { PublicTrackingDto } from '@estene/contracts/shipment';
 import { formatDateTime } from '@estene/lib/date';
 import { cn } from '@estene/lib/utils';
 import { ShipmentStatusBadge } from '@estene/ui/ShipmentStatusBadge';
+import { BalanceDue } from '@/components/BalanceDue';
 import { TrackForm } from '@/components/TrackForm';
 import { PublicApiError, publicApi } from '@/lib/api';
 
@@ -58,7 +59,9 @@ function TrackingResult({ parcel }: { parcel: PublicTrackingDto }) {
   const meta = SHIPMENT_STATUS_META[parcel.status];
   const reached = new Map<ShipmentStatus, string>();
   parcel.events.forEach((e) => reached.set(e.status, e.at));
-  const offPath = !TRACKING_MILESTONES.includes(parcel.status);
+  // Unpaid bookings are explained by the payment card instead of the generic help note.
+  const offPath =
+    !TRACKING_MILESTONES.includes(parcel.status) && parcel.status !== 'awaiting_payment';
   const currentIdx = Math.max(...TRACKING_MILESTONES.map((m, i) => (reached.has(m) ? i : -1)));
 
   return (
@@ -71,6 +74,8 @@ function TrackingResult({ parcel }: { parcel: PublicTrackingDto }) {
         </div>
         <ShipmentStatusBadge status={parcel.status} className="text-sm" />
       </div>
+
+      {parcel.payment && <BalanceDue trackingNumber={parcel.trackingNumber} due={parcel.payment} />}
 
       <dl className="grid gap-4 rounded-2xl border border-slate-200 p-5 text-sm sm:grid-cols-3">
         <div>

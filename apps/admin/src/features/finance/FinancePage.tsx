@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, HandCoins, Receipt, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,7 +48,7 @@ type Entry = {
   note?: string;
   createdAt: string;
 };
-type MoneyAction = { kind: 'payout' | 'remittance'; rider: Balance };
+type MoneyAction = { kind: 'remittance'; rider: Balance };
 
 export default function FinancePage() {
   const [page, setPage] = useState(1);
@@ -157,12 +158,8 @@ export default function FinancePage() {
                           </Button>
                         )}
                         {b.type === 'partner' && b.balance > 0 && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setAction({ kind: 'payout', rider: b })}
-                          >
-                            Pay out
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to="/payouts">Pay out</Link>
                           </Button>
                         )}
                       </TD>
@@ -226,28 +223,28 @@ export default function FinancePage() {
         </Card>
       </div>
 
-      {action && <MoneyDialog action={action} onClose={() => setAction(null)} />}
+      {action && <RemittanceDialog action={action} onClose={() => setAction(null)} />}
     </>
   );
 }
 
-function MoneyDialog({ action, onClose }: { action: MoneyAction; onClose: () => void }) {
+/** Records cash a rider has handed in — it stops counting against their payout balance. */
+function RemittanceDialog({ action, onClose }: { action: MoneyAction; onClose: () => void }) {
   const qc = useQueryClient();
-  const isPayout = action.kind === 'payout';
-  const suggested = isPayout ? action.rider.balance : action.rider.cashHeld;
-  const [amount, setAmount] = useState(String(suggested / 100));
+  const [amount, setAmount] = useState(String(action.rider.cashHeld / 100));
   const [reference, setReference] = useState('');
 
   const record = useMutation({
     mutationFn: () =>
-      api.post(isPayout ? '/finance/payouts' : '/finance/remittances', {
+      api.post('/finance/remittances', {
         riderId: action.rider.riderId,
         amount: nairaToKobo(Number(amount)),
         reference: reference || undefined,
       }),
     onSuccess: () => {
-      toast.success(isPayout ? 'Payout recorded' : 'Cash remittance recorded');
+      toast.success('Cash remittance recorded');
       void qc.invalidateQueries({ queryKey: ['finance'] });
+      void qc.invalidateQueries({ queryKey: ['payouts'] });
       onClose();
     },
   });
@@ -255,21 +252,14 @@ function MoneyDialog({ action, onClose }: { action: MoneyAction; onClose: () => 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        title={isPayout ? `Pay ${action.rider.name}` : `Cash in from ${action.rider.name}`}
-        description={
-          isPayout
-            ? 'Record a transfer you have already made to this partner.'
-            : 'Record cash the rider has handed over.'
-        }
+        title={`Cash in from ${action.rider.name}`}
+        description="Record cash the rider has handed over."
       >
         <div className="space-y-4">
           <Field label="Amount (₦)">
             <Input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
-          <Field
-            label="Reference (optional)"
-            hint={isPayout ? 'Bank transfer reference' : 'Receipt number'}
-          >
+          <Field label="Reference (optional)" hint="Receipt number">
             <Input value={reference} onChange={(e) => setReference(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2">
