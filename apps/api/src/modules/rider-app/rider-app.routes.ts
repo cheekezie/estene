@@ -90,6 +90,18 @@ export async function riderAppRoutes(app: FastifyInstance) {
     return send(reply, await ShipmentsService.advance(id, req.user.sub, status, note));
   });
 
+  /** Last mile from an office: the rider scans the parcel's QR tag at the counter to take it. */
+  app.post('/jobs/:id/collect-from-office', async (req, reply) => {
+    const { id } = parse(IdParams, req.params);
+    const { tagCode } = parse(z.object({ tagCode: z.string().trim().min(6) }), req.body);
+    return send(
+      reply,
+      await ShipmentsService.collectFromOffice(id, req.user.sub, tagCode),
+      200,
+      'Out for delivery',
+    );
+  });
+
   /** Sender couldn't pay the re-priced balance online — the rider takes it in cash before handing over. */
   app.post('/jobs/:id/collect-balance', async (req, reply) => {
     const { id } = parse(IdParams, req.params);

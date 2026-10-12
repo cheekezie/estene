@@ -49,14 +49,17 @@ export const PricingService = {
       if (!zone) throw badRequest('We do not deliver to that area yet');
       return zone.intraZoneFare;
     }
-    const zones = await ZoneModel.countDocuments({
-      _id: { $in: [pickupZoneId, dropoffZoneId] },
-      isActive: true,
-    });
-    if (zones !== 2) throw badRequest('We do not deliver to that area yet');
+    const zones = await ZoneModel.find(
+      { _id: { $in: [pickupZoneId, dropoffZoneId] }, isActive: true },
+      'state',
+    ).lean();
+    if (zones.length !== 2) throw badRequest('We do not deliver to that area yet');
 
     const rate = await RouteRateModel.findOne(orderedPair(pickupZoneId, dropoffZoneId)).lean();
-    return rate?.fare ?? (await this.getConfig()).defaultRouteFare;
+    if (rate) return rate.fare;
+    const config = await this.getConfig();
+    const interstate = (zones[0]!.state ?? 'FCT') !== (zones[1]!.state ?? 'FCT');
+    return interstate ? (config.interstateFare ?? 450_000) : config.defaultRouteFare;
   },
 
   async quote(req: QuoteRequest) {

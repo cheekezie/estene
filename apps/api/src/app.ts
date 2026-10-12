@@ -12,6 +12,9 @@ import { integrationRoutes } from './modules/integration/integration.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { financeRoutes } from './modules/finance/finance.routes';
 import { shipmentsRoutes } from './modules/shipments/shipments.routes';
+import { manifestsRoutes } from './modules/manifests/manifests.routes';
+import { officeOpsRoutes } from './modules/office-ops/office-ops.routes';
+import { officesRoutes } from './modules/offices/offices.routes';
 import { paymentsRoutes } from './modules/payments/payments.routes';
 import { payoutsRoutes } from './modules/payouts/payouts.routes';
 import { simulatorRoutes } from './modules/payments/simulator.routes';
@@ -117,6 +120,9 @@ export async function buildApp() {
   await app.register(adminsRoutes, { prefix: '/api/staff' });
   await app.register(clientsRoutes, { prefix: '/api/clients' });
   await app.register(paymentsRoutes, { prefix: '/api/payments' });
+  await app.register(officesRoutes, { prefix: '/api/offices' });
+  await app.register(officeOpsRoutes, { prefix: '/api/office' });
+  await app.register(manifestsRoutes, { prefix: '/api/manifests' });
   await app.register(payoutsRoutes, { prefix: '/api/payouts' });
 
   return app;

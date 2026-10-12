@@ -22,7 +22,9 @@
     "./webhook-events": "./src/webhook-events.ts",
     "./payment": "./src/payment.ts",
     "./payout": "./src/payout.ts",
-    "./banks": "./src/banks.ts"
+    "./banks": "./src/banks.ts",
+    "./office": "./src/office.ts",
+    "./manifest": "./src/manifest.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"

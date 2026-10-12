@@ -1,4 +1,4 @@
-import type { FilterQuery, UpdateQuery } from 'mongoose';
+import { Types, type FilterQuery, type UpdateQuery } from 'mongoose';
 import {
   isPrepaid,
   type ActorType,
@@ -25,6 +25,8 @@ import { PricingService } from '../pricing/pricing.service';
 import { RiderModel } from '../riders/models/rider.model';
 import { ParcelTagModel } from '../tags/models/parcel-tag.model';
 import { ZoneModel } from '../zones/models/zone.model';
+import { OfficeModel, type IOffice } from '../offices/models/office.model';
+import { OfficesService } from '../offices/offices.service';
 import { ShipmentModel, type IShipment, type ShipmentDoc } from './models/shipment.model';
 import {
   SHIPMENT_POPULATE,
@@ -51,6 +53,215 @@ const toStopDoc = (s: StopInput) => {
     }),
   };
 };
+
+type ResolvedStop = StopInput & { zoneId: string; area: string; address: string };
+
+const officeOrFail = async (id: string | undefined, label: string) => {
+  const office = id ? await OfficeModel.findOne({ _id: id, isActive: true }) : null;
+  if (!office) throw badRequest(`Choose an open Estene office to ${label}`);
+  return office;
+};
+
+/**
+ * Decides how a booking travels. Offices stand in for addresses on drop-off
+ * and collection; an interstate shipment always passes through an office at
+ * each end (the nearest one in the state if the customer didn't pick).
+ */
+async function resolveRoute(input: NewShipmentInput) {
+  let pickup = { ...input.pickup } as ResolvedStop;
+  let dropoff = { ...input.dropoff } as ResolvedStop;
+  let originOffice: IOffice | null = null;
+  let destinationOffice: IOffice | null = null;
+
+  if (input.originMode === 'dropoff') {
+    originOffice = await officeOrFail(input.originOfficeId, 'drop off at');
+    pickup = {
+      ...pickup,
+      zoneId: originOffice.zone.toString(),
+      area: originOffice.area,
+      address: originOffice.address,
+      landmark: `Estene ${originOffice.name}`,
+    };
+  }
+  if (input.deliveryMode === 'collection') {
+    destinationOffice = await officeOrFail(input.destinationOfficeId, 'collect from');
+    dropoff = {
+      ...dropoff,
+      zoneId: destinationOffice.zone.toString(),
+      area: destinationOffice.area,
+      address: destinationOffice.address,
+      landmark: `Estene ${destinationOffice.name}`,
+    };
+  }
+
+  const zoneIds = [...new Set([pickup.zoneId, dropoff.zoneId])];
+  const zones = await ZoneModel.find({ _id: { $in: zoneIds }, isActive: true }, 'areas state');
+  if (zones.length !== zoneIds.length) throw badRequest('We do not deliver to that area yet');
+  for (const stop of [pickup, dropoff]) {
+    const zone = zones.find((z) => z.id === stop.zoneId);
+    if (zone && !zone.areas.includes(stop.area))
+      throw badRequest(`"${stop.area}" is not an area we serve in that zone`);
+  }
+  const stateOf = (zoneId: string) => zones.find((z) => z.id === zoneId)?.state ?? 'FCT';
+  const interstate = stateOf(pickup.zoneId) !== stateOf(dropoff.zoneId);
+
+  if (interstate) {
+    originOffice ??= await OfficesService.nearestFor(pickup.zoneId);
+    destinationOffice ??= await OfficesService.nearestFor(dropoff.zoneId);
+    if (!originOffice || !destinationOffice)
+      throw badRequest('We don’t have an Estene office in that state yet');
+  } else if (originOffice || destinationOffice) {
+    // Local trip through one office: it's both the hand-in and hand-out point.
+    originOffice ??= destinationOffice;
+    destinationOffice ??= originOffice;
+  }
+
+  return {
+    pickup,
+    dropoff,
+    fulfilment: {
+      originMode: input.originMode,
+      deliveryMode: input.deliveryMode,
+      interstate,
+      originOffice: originOffice?._id ?? null,
+      destinationOffice: destinationOffice?._id ?? null,
+    },
+  };
+}
+
+/**
+ * Takes custody of a parcel — a rider at pickup or a counter at drop-off:
+ * binds a fresh QR tag, confirms size/weight and re-prices with the same
+ * rules as the booking (a change needs a reason). Releases the tag on failure.
+ */
+async function acceptParcel(
+  shipment: ShipmentDoc,
+  to: ShipmentStatus,
+  actor: Actor,
+  input: ConfirmPickupInput,
+  extraSet: Record<string, unknown> = {},
+) {
+  const shipmentId = shipment.id as string;
+  const config = await PricingService.getConfig();
+  const confirmed = computeQuote(
+    {
+      routeFare: shipment.estimate.routeFare,
+      size: input.size,
+      weightKg: input.weightKg,
+      serviceLevel: shipment.serviceLevel,
+      fragile: shipment.parcel.fragile,
+      declaredValue: shipment.parcel.declaredValue,
+    },
+    config,
+  );
+  const priceChanged = confirmed.total !== shipment.estimate.total;
+  if (priceChanged && !input.adjustmentReason) {
+    throw badRequest(
+      'The parcel differs from the booking — add a reason for the price change',
+      'ADJUSTMENT_REASON_REQUIRED',
+    );
+  }
+
+  const tag = await ParcelTagModel.findOneAndUpdate(
+    { code: input.tagCode, status: 'available' },
+    { status: 'bound', shipment: shipment._id, boundAt: new Date() },
+    { new: true },
+  );
+  if (!tag)
+    throw badRequest('This tag is invalid or already used. Scan a fresh tag.', 'INVALID_TAG');
+
+  try {
+    const updated = await transition(shipmentId, to, actor, {
+      note: priceChanged ? `Price adjusted: ${input.adjustmentReason}` : undefined,
+      set: {
+        $set: {
+          ...extraSet,
+          tagCode: tag.code,
+          finalAmount: confirmed.total,
+          'parcel.size': input.size,
+          'parcel.weightKg': input.weightKg,
+          ...(input.description && { 'parcel.description': input.description }),
+          ...(priceChanged && {
+            adjustment: {
+              from: shipment.estimate.total,
+              to: confirmed.total,
+              reason: input.adjustmentReason,
+              at: new Date(),
+              by: actor.id,
+            },
+          }),
+        },
+      },
+    });
+    if (priceChanged) {
+      bus.emit('shipment.price_adjusted', {
+        shipmentId,
+        from: shipment.estimate.total,
+        to: confirmed.total,
+        reason: input.adjustmentReason,
+      });
+    }
+    return toShipmentDto(updated);
+  } catch (err) {
+    // Release the tag so the rider can retry with it.
+    await ParcelTagModel.updateOne(
+      { _id: tag._id },
+      { status: 'available', $unset: { shipment: 1, boundAt: 1 } },
+    );
+    throw err;
+  }
+}
+
+/** A prepaid shipment re-priced upward can't be handed over until the difference is paid. */
+function assertNothingOwed(shipment: ShipmentDoc) {
+  const balance = payableAmount(shipment) - (shipment.amountPaid ?? 0);
+  if (isPrepaid(shipment.paymentMethod) && balance > 0) {
+    throw new AppError(
+      400,
+      `₦${(balance / 100).toLocaleString('en-NG')} is still unpaid. Ask the sender to pay to their account number, or collect cash and record it.`,
+      'BALANCE_DUE',
+    );
+  }
+}
+
+/** Checks the recipient's delivery PIN; locks after MAX_PIN_ATTEMPTS wrong tries. */
+async function verifyRecipientPin(shipment: ShipmentDoc, pin: string | undefined) {
+  const withPin = shipment.pinCipher
+    ? shipment
+    : await ShipmentModel.findById(shipment._id).select('+pinCipher');
+  if (!withPin) throw notFound('Shipment not found');
+  if (withPin.pinAttempts >= MAX_PIN_ATTEMPTS) {
+    throw badRequest(
+      'Too many wrong PINs — verify the recipient’s ID with a supervisor',
+      'PIN_LOCKED',
+    );
+  }
+  if (!safeEqual(decrypt(withPin.pinCipher), pin ?? '')) {
+    await ShipmentModel.updateOne({ _id: shipment._id }, { $inc: { pinAttempts: 1 } });
+    throw badRequest('Incorrect PIN', 'WRONG_PIN');
+  }
+}
+
+/**
+ * The pay basis for one rider job. Door-to-door: the whole fare. Office-routed
+ * trips split into a first mile (pickup → office) and last mile (office →
+ * door), each paid at that zone's local fare.
+ */
+async function riderLeg(
+  shipment: ShipmentDoc,
+  riderId: string,
+  kind: 'full' | 'first_mile' | 'last_mile',
+) {
+  let fare = payableAmount(shipment);
+  if (kind !== 'full') {
+    const zone = await ZoneModel.findById(
+      kind === 'first_mile' ? shipment.pickup.zone : shipment.dropoff.zone,
+      'intraZoneFare',
+    ).lean();
+    fare = Math.min(fare, zone?.intraZoneFare ?? fare);
+  }
+  return { rider: new Types.ObjectId(riderId), kind, fare, completedAt: new Date() };
+}
 
 async function loadShipment(id: string): Promise<ShipmentDoc> {
   const shipment = await ShipmentModel.findById(id).populate(SHIPMENT_POPULATE);
@@ -84,7 +295,7 @@ async function transition(
   const allowed = actor.type === 'system' || canTransition(from, to, actor.type);
   if (!allowed) {
     throw badRequest(
-      `Cannot move an shipment from "${SHIPMENT_STATUS_META[from].label}" to "${SHIPMENT_STATUS_META[to].label}"`,
+      `Cannot move a shipment from "${SHIPMENT_STATUS_META[from].label}" to "${SHIPMENT_STATUS_META[to].label}"`,
       'INVALID_TRANSITION',
     );
   }
@@ -94,7 +305,9 @@ async function transition(
     {
       ...opts.set,
       $set: { ...(opts.set?.$set as object), status: to },
+      // Merge, don't replace: callers may push too (e.g. rider legs) alongside the event.
       $push: {
+        ...(opts.set?.$push as object),
         events: {
           status: to,
           note: opts.note,
@@ -122,6 +335,10 @@ async function requireRiderShipment(shipmentId: string, riderId: string) {
 
 export const ShipmentsService = {
   transition,
+  acceptParcel,
+  verifyRecipientPin,
+  assertNothingOwed,
+  riderLeg,
 
   /**
    * Creates an shipment from any channel. With a client + clientReference the
@@ -145,18 +362,11 @@ export const ShipmentsService = {
       }
     }
 
-    const zoneIds = [...new Set([input.pickup.zoneId, input.dropoff.zoneId])];
-    const zones = await ZoneModel.find({ _id: { $in: zoneIds }, isActive: true }, 'areas');
-    if (zones.length !== zoneIds.length) throw badRequest('We do not deliver to that area yet');
-    for (const stop of [input.pickup, input.dropoff]) {
-      const zone = zones.find((z) => z.id === stop.zoneId);
-      if (zone && !zone.areas.includes(stop.area))
-        throw badRequest(`"${stop.area}" is not an area we serve in that zone`);
-    }
+    const { pickup, dropoff, fulfilment } = await resolveRoute(input);
 
     const quote = await PricingService.quote({
-      pickupZoneId: input.pickup.zoneId,
-      dropoffZoneId: input.dropoff.zoneId,
+      pickupZoneId: pickup.zoneId,
+      dropoffZoneId: dropoff.zoneId,
       serviceLevel: input.serviceLevel,
       ...input.parcel,
     });
@@ -169,8 +379,9 @@ export const ShipmentsService = {
         source: opts.source,
         client: opts.clientId ?? null,
         clientReference: opts.clientReference,
-        pickup: toStopDoc(input.pickup),
-        dropoff: toStopDoc(input.dropoff),
+        pickup: toStopDoc(pickup),
+        dropoff: toStopDoc(dropoff),
+        fulfilment,
         parcel: input.parcel,
         serviceLevel: input.serviceLevel,
         paymentMethod: input.paymentMethod,
@@ -277,7 +488,10 @@ export const ShipmentsService = {
   },
 
   async unassignRider(shipmentId: string, actor: Actor, note?: string) {
-    const shipment = await transition(shipmentId, 'created', actor, {
+    // A last-mile rider taken off leaves the parcel where it is: at the office.
+    const atOffice = !!(await ShipmentModel.findById(shipmentId, 'currentOffice').lean())
+      ?.currentOffice;
+    const shipment = await transition(shipmentId, atOffice ? 'at_hub' : 'created', actor, {
       note,
       set: { $set: { rider: null, 'dispatch.state': 'searching' } },
     });
@@ -302,84 +516,20 @@ export const ShipmentsService = {
     if (shipment.status === 'assigned')
       await transition(shipmentId, 'en_route_to_pickup', { type: 'rider', id: riderId });
 
-    const config = await PricingService.getConfig();
-    const confirmed = computeQuote(
-      {
-        routeFare: shipment.estimate.routeFare,
-        size: input.size,
-        weightKg: input.weightKg,
-        serviceLevel: shipment.serviceLevel,
-        fragile: shipment.parcel.fragile,
-        declaredValue: shipment.parcel.declaredValue,
-      },
-      config,
-    );
-    const priceChanged = confirmed.total !== shipment.estimate.total;
-    if (priceChanged && !input.adjustmentReason) {
-      throw badRequest(
-        'The parcel differs from the booking — add a reason for the price change',
-        'ADJUSTMENT_REASON_REQUIRED',
-      );
-    }
-
-    const tag = await ParcelTagModel.findOneAndUpdate(
-      { code: input.tagCode, status: 'available' },
-      { status: 'bound', shipment: shipment._id, boundAt: new Date() },
-      { new: true },
-    );
-    if (!tag)
-      throw badRequest('This tag is invalid or already used. Scan a fresh tag.', 'INVALID_TAG');
-
-    try {
-      const updated = await transition(
-        shipmentId,
-        'picked_up',
-        { type: 'rider', id: riderId },
-        {
-          note: priceChanged ? `Price adjusted: ${input.adjustmentReason}` : undefined,
-          set: {
-            $set: {
-              tagCode: tag.code,
-              finalAmount: confirmed.total,
-              'parcel.size': input.size,
-              'parcel.weightKg': input.weightKg,
-              ...(input.description && { 'parcel.description': input.description }),
-              ...(priceChanged && {
-                adjustment: {
-                  from: shipment.estimate.total,
-                  to: confirmed.total,
-                  reason: input.adjustmentReason,
-                  at: new Date(),
-                  by: riderId,
-                },
-              }),
-            },
-          },
-        },
-      );
-      if (priceChanged) {
-        bus.emit('shipment.price_adjusted', {
-          shipmentId,
-          from: shipment.estimate.total,
-          to: confirmed.total,
-          reason: input.adjustmentReason,
-        });
-      }
-      return toShipmentDto(updated);
-    } catch (err) {
-      // Release the tag so the rider can retry with it.
-      await ParcelTagModel.updateOne(
-        { _id: tag._id },
-        { status: 'available', $unset: { shipment: 1, boundAt: 1 } },
-      );
-      throw err;
-    }
+    return acceptParcel(shipment, 'picked_up', { type: 'rider', id: riderId }, input);
   },
 
   async advance(shipmentId: string, riderId: string, to: ShipmentStatus, note?: string) {
-    await requireRiderShipment(shipmentId, riderId);
+    const shipment = await requireRiderShipment(shipmentId, riderId);
     if (to === 'picked_up' || to === 'delivered')
       throw badRequest('Use the scan flow for this step');
+    // First mile of an office-routed parcel ends at the office counter, not with the recipient.
+    if (shipment.status === 'picked_up' && shipment.fulfilment?.originOffice) {
+      throw badRequest(
+        'Hand this parcel in at the Estene office — staff will scan it in',
+        'HAND_IN_AT_OFFICE',
+      );
+    }
     return toShipmentDto(
       await transition(shipmentId, to, { type: 'rider', id: riderId }, { note }),
     );
@@ -388,27 +538,10 @@ export const ShipmentsService = {
   /** Rider at drop-off: rescans the tag, then proves delivery with the recipient's PIN or a photo. */
   async confirmDelivery(shipmentId: string, riderId: string, input: ConfirmDeliveryInput) {
     const shipment = await requireRiderShipment(shipmentId, riderId);
-    // A prepaid shipment re-priced upward at pickup can't be handed over until the difference is in.
-    const balance = payableAmount(shipment) - (shipment.amountPaid ?? 0);
-    if (isPrepaid(shipment.paymentMethod) && balance > 0) {
-      throw new AppError(
-        400,
-        `₦${(balance / 100).toLocaleString('en-NG')} is still unpaid. Ask the sender to pay to their account number, or collect cash and record it.`,
-        'BALANCE_DUE',
-      );
-    }
+    assertNothingOwed(shipment);
     if (shipment.tagCode !== input.tagCode)
       throw badRequest('Tag does not match this parcel', 'TAG_MISMATCH');
-
-    if (input.method === 'pin') {
-      if (shipment.pinAttempts >= MAX_PIN_ATTEMPTS) {
-        throw badRequest('Too many wrong PINs — take a delivery photo instead', 'PIN_LOCKED');
-      }
-      if (!safeEqual(decrypt(shipment.pinCipher), input.pin ?? '')) {
-        await ShipmentModel.updateOne({ _id: shipmentId }, { $inc: { pinAttempts: 1 } });
-        throw badRequest('Incorrect PIN', 'WRONG_PIN');
-      }
-    }
+    if (input.method === 'pin') await verifyRecipientPin(shipment, input.pin);
 
     const updated = await transition(
       shipmentId,
@@ -418,6 +551,7 @@ export const ShipmentsService = {
         set: {
           $set: {
             deliveredAt: new Date(),
+            currentOffice: null,
             proof: {
               method: input.method,
               photoUrl: input.photoUrl,
@@ -425,7 +559,33 @@ export const ShipmentsService = {
               at: new Date(),
             },
           },
+          $push: {
+            riderLegs: await riderLeg(
+              shipment,
+              riderId,
+              shipment.fulfilment?.destinationOffice ? 'last_mile' : 'full',
+            ),
+          },
         },
+      },
+    );
+    return toShipmentDto(updated);
+  },
+
+  /** Last-mile rider at the destination office: scans the parcel's tag to take it out for delivery. */
+  async collectFromOffice(shipmentId: string, riderId: string, tagCode: string) {
+    const shipment = await requireRiderShipment(shipmentId, riderId);
+    if (shipment.status !== 'assigned' || !shipment.currentOffice)
+      throw badRequest('This job doesn’t start at an office');
+    if (shipment.tagCode !== tagCode.trim().toUpperCase())
+      throw badRequest('Tag does not match this parcel', 'TAG_MISMATCH');
+    const updated = await transition(
+      shipmentId,
+      'out_for_delivery',
+      { type: 'rider', id: riderId },
+      {
+        note: 'Collected from the office',
+        set: { $set: { currentOffice: null } },
       },
     );
     return toShipmentDto(updated);

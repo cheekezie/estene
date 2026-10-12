@@ -17,6 +17,8 @@ const kobo = z.number().int().nonnegative();
 export const PricingConfigSchema = z.object({
   /** Fallback fare when no zone-to-zone route rate exists. */
   defaultRouteFare: kobo,
+  /** Fallback between zones in different states when no specific route fare is set. */
+  interstateFare: kobo.default(450_000),
   sizeFees: z.record(z.enum(PARCEL_SIZES), kobo),
   /** Weight included in the size fee before per-kg charges kick in. */
   includedKg: z.number().nonnegative(),
@@ -33,6 +35,7 @@ export type PricingConfig = z.infer<typeof PricingConfigSchema>;
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   defaultRouteFare: 250_000,
+  interstateFare: 450_000,
   sizeFees: { envelope: 0, small: 50_000, medium: 120_000, large: 250_000, xlarge: 500_000 },
   includedKg: 5,
   perKgFee: 15_000,

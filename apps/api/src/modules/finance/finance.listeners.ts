@@ -5,6 +5,6 @@ export function registerFinance() {
   bus.on('payment.succeeded', ({ paymentId }) => FinanceService.recordPayment(paymentId));
 
   bus.on('shipment.status_changed', async ({ shipmentId, to }) => {
-    if (to === 'delivered') await FinanceService.recordDelivery(shipmentId);
+    if (to === 'delivered' || to === 'collected') await FinanceService.recordDelivery(shipmentId);
   });
 }

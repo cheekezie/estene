@@ -5,14 +5,16 @@
 
 export const SHIPMENT_STATUSES = [
   'awaiting_payment', // booked with online payment; dispatch starts once paid
-  'created', // booked (and paid, if paying online), waiting for a rider
+  'created', // booked (and paid, if prepaid): waiting for a rider, or for the sender to drop it at an office
   'assigned', // a rider accepted the job
   'en_route_to_pickup',
   'picked_up', // parcel scanned + tagged, price confirmed
-  'in_transit',
-  'at_hub', // inter-zone parcels staged at a hub
+  'in_transit', // moving — locally with a rider, or between states on a manifest
+  'at_hub', // in the custody of an Estene office (origin or destination)
   'out_for_delivery',
+  'ready_for_collection', // at the destination office, waiting for the recipient
   'delivered',
+  'collected', // recipient picked it up at the office
   'delivery_failed',
   'returned',
   'cancelled',
@@ -94,7 +96,9 @@ export const WEBHOOK_EVENTS = [
   'shipment.in_transit',
   'shipment.at_hub',
   'shipment.out_for_delivery',
+  'shipment.ready_for_collection',
   'shipment.delivered',
+  'shipment.collected',
   'shipment.delivery_failed',
   'shipment.returned',
   'shipment.cancelled',
@@ -124,12 +128,29 @@ export type RiderStatus = (typeof RIDER_STATUSES)[number];
 export const VEHICLE_TYPES = ['bike', 'tricycle', 'car', 'van'] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 
+/** How the parcel reaches Estene: a rider collects it, or the sender brings it to an office. */
+export const ORIGIN_MODES = ['pickup', 'dropoff'] as const;
+export type OriginMode = (typeof ORIGIN_MODES)[number];
+
+/** How it reaches the recipient: a rider delivers it, or they collect it at an office. */
+export const DELIVERY_MODES = ['door', 'collection'] as const;
+export type DeliveryMode = (typeof DELIVERY_MODES)[number];
+
+/** A batch of parcels moving between two offices (line-haul). */
+export const MANIFEST_STATUSES = ['open', 'in_transit', 'arrived', 'closed'] as const;
+export type ManifestStatus = (typeof MANIFEST_STATUSES)[number];
+
+/** own_vehicle = an Estene van/truck and driver; partner = a transport company with its own waybill. */
+export const CARRIER_TYPES = ['own_vehicle', 'partner'] as const;
+export type CarrierType = (typeof CARRIER_TYPES)[number];
+
 export const ADMIN_ROLES = [
   'super_admin',
   'ops_manager',
   'dispatcher',
   'finance',
   'support',
+  'office_agent', // runs an office counter: drop-offs, manifests, collections
 ] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 

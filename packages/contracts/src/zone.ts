@@ -10,6 +10,8 @@ export const ZoneInputSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z]{2,4}$/, 'Use 2–4 letters'),
   city: z.string().trim().default('Abuja'),
+  /** Nigerian state — shipments between zones in different states are interstate. */
+  state: z.string().trim().min(2).default('FCT'),
   /** Districts/neighbourhoods the zone covers — what customers pick from. */
   areas: z.array(z.string().trim().min(2)).min(1, 'Add at least one area'),
   center: GeoPointSchema,

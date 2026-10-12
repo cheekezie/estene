@@ -6,6 +6,7 @@ import { RiderModel } from '../riders/models/rider.model';
 import { PresenceService } from '../riders/presence.service';
 import { activeJobCounts } from '../riders/riders.service';
 import { ZoneModel } from '../zones/models/zone.model';
+import { OfficeModel } from '../offices/models/office.model';
 import { bus } from '../../lib/events';
 import { conflict } from '../../lib/errors';
 import { getQueue } from '../../lib/queue';
@@ -26,12 +27,28 @@ export const DispatchService = {
   /** Finds the best available rider and sends them a time-boxed offer. Safe to call repeatedly. */
   async dispatchShipment(shipmentId: string) {
     const shipment = await ShipmentModel.findById(shipmentId);
-    if (!shipment || shipment.status !== 'created' || shipment.rider) return;
+    if (!shipment || shipment.rider) return;
+    // Two kinds of job: first pickup from the sender, or a last mile from the office now holding it.
+    const firstMile =
+      shipment.status === 'created' && shipment.fulfilment?.originMode !== 'dropoff';
+    const lastMile =
+      shipment.status === 'at_hub' &&
+      !!shipment.currentOffice &&
+      shipment.fulfilment?.deliveryMode === 'door' &&
+      shipment.dispatch.state === 'searching';
+    if (!firstMile && !lastMile) return;
     if (await DispatchOfferModel.exists({ shipment: shipmentId, status: 'pending' })) return;
 
-    const zone = await ZoneModel.findById(shipment.pickup.zone);
+    const office = lastMile
+      ? await OfficeModel.findById(shipment.currentOffice, 'zone location').lean()
+      : null;
+    const zone = await ZoneModel.findById(office?.zone ?? shipment.pickup.zone);
     if (!zone) return;
-    const [lng, lat] = shipment.pickup.location?.coordinates ?? zone.center.coordinates;
+    const [lng, lat] =
+      office?.location?.coordinates ??
+      (lastMile
+        ? zone.center.coordinates
+        : (shipment.pickup.location?.coordinates ?? zone.center.coordinates));
 
     const nearby = await PresenceService.nearby({ lng, lat }, zone.radiusKm + SEARCH_BUFFER_KM);
     const excluded = new Set(shipment.dispatch.declinedBy.map(String));

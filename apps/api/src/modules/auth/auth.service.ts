@@ -10,21 +10,34 @@ import { RiderModel } from '../riders/models/rider.model';
 import { SessionModel } from './models/session.model';
 
 type ClientMeta = { ip?: string; userAgent?: string };
-type Subject = { id: string; actor: ActorType; role?: AdminRole };
+type Subject = { id: string; actor: ActorType; role?: AdminRole; officeId?: string };
 
 // Same cost whether or not the account exists, so login timing doesn't reveal valid emails.
 const DUMMY_HASH = bcrypt.hashSync('timing-equaliser', 10);
 
-export const toAdminProfile = (a: IAdmin): AdminProfile => ({
-  id: a._id.toString(),
-  name: a.name,
-  email: a.email,
-  role: a.role,
-});
+export const toAdminProfile = (a: IAdmin): AdminProfile => {
+  const office = a.office as unknown as
+    { _id: { toString(): string }; name: string; code: string } | null | undefined;
+  return {
+    id: a._id.toString(),
+    name: a.name,
+    email: a.email,
+    role: a.role,
+    office:
+      office && 'code' in office
+        ? { id: office._id.toString(), name: office.name, code: office.code }
+        : null,
+  };
+};
 
 export function createAuthService(app: FastifyInstance) {
   async function issueTokens(subject: Subject, meta: ClientMeta, family = randomToken(12)) {
-    const accessToken = app.jwt.sign({ sub: subject.id, actor: subject.actor, role: subject.role });
+    const accessToken = app.jwt.sign({
+      sub: subject.id,
+      actor: subject.actor,
+      role: subject.role,
+      officeId: subject.officeId,
+    });
     const refreshToken = randomToken();
     await SessionModel.create({
       actor: subject.actor,
@@ -40,13 +53,18 @@ export function createAuthService(app: FastifyInstance) {
 
   return {
     async adminLogin(input: AdminLoginInput, meta: ClientMeta) {
-      const admin = await AdminModel.findOne({ email: input.email, isActive: true }).select('+passwordHash');
+      const admin = await AdminModel.findOne({ email: input.email, isActive: true })
+        .select('+passwordHash')
+        .populate('office', 'name code');
       const valid = await bcrypt.compare(input.password, admin?.passwordHash ?? DUMMY_HASH);
       if (!admin || !valid) throw unauthorized('Incorrect email or password');
 
       admin.lastLoginAt = new Date();
       await admin.save();
-      const tokens = await issueTokens({ id: admin.id, actor: 'admin', role: admin.role }, meta);
+      const tokens = await issueTokens(
+        { id: admin.id, actor: 'admin', role: admin.role, officeId: admin.office?._id?.toString() },
+        meta,
+      );
       return { ...tokens, user: toAdminProfile(admin) };
     },
 
@@ -54,10 +72,14 @@ export function createAuthService(app: FastifyInstance) {
       const rider = await RiderModel.findOne({ phone: input.phone }).select('+passwordHash');
       const valid = await bcrypt.compare(input.password, rider?.passwordHash ?? DUMMY_HASH);
       if (!rider || !valid) throw unauthorized('Incorrect phone number or password');
-      if (rider.status !== 'active') throw unauthorized('Your account is not active. Contact operations.');
+      if (rider.status !== 'active')
+        throw unauthorized('Your account is not active. Contact operations.');
 
       const tokens = await issueTokens({ id: rider.id, actor: 'rider' }, meta);
-      return { ...tokens, user: { id: rider.id, name: `${rider.firstName} ${rider.lastName}`, code: rider.code } };
+      return {
+        ...tokens,
+        user: { id: rider.id, name: `${rider.firstName} ${rider.lastName}`, code: rider.code },
+      };
     },
 
     /** Rotates the refresh token. Reuse of a rotated token revokes the whole family. */
@@ -71,14 +93,16 @@ export function createAuthService(app: FastifyInstance) {
       }
 
       let role: AdminRole | undefined;
+      let officeId: string | undefined;
       if (session.actor === 'admin') {
         const admin = await AdminModel.findOne({ _id: session.subject, isActive: true });
         if (!admin) throw unauthorized('Session expired');
         role = admin.role;
+        officeId = admin.office?.toString();
       }
 
       const tokens = await issueTokens(
-        { id: session.subject.toString(), actor: session.actor, role },
+        { id: session.subject.toString(), actor: session.actor, role, officeId },
         meta,
         session.family,
       );
@@ -91,11 +115,12 @@ export function createAuthService(app: FastifyInstance) {
     async logout(refreshToken: string | undefined) {
       if (!refreshToken) return;
       const session = await SessionModel.findOne({ tokenHash: sha256(refreshToken) });
-      if (session) await SessionModel.updateMany({ family: session.family }, { revokedAt: new Date() });
+      if (session)
+        await SessionModel.updateMany({ family: session.family }, { revokedAt: new Date() });
     },
 
     async adminProfile(adminId: string) {
-      const admin = await AdminModel.findById(adminId);
+      const admin = await AdminModel.findById(adminId).populate('office', 'name code');
       if (!admin || !admin.isActive) throw unauthorized();
       return toAdminProfile(admin);
     },

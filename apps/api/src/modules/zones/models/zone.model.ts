@@ -5,6 +5,7 @@ export interface IZone {
   name: string;
   code: string;
   city: string;
+  state: string;
   areas: string[];
   /** GeoJSON point — [lng, lat] shipment, as Mongo requires. */
   center: { type: 'Point'; coordinates: [number, number] };
@@ -20,6 +21,7 @@ const zoneSchema = new Schema<IZone>(
     name: { type: String, required: true, trim: true },
     code: { type: String, required: true, unique: true, uppercase: true },
     city: { type: String, required: true, default: 'Abuja' },
+    state: { type: String, required: true, default: 'FCT', index: true },
     areas: { type: [String], default: [] },
     center: {
       type: { type: String, enum: ['Point'], default: 'Point' },

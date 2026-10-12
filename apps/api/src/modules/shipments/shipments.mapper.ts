@@ -17,7 +17,47 @@ export const SHIPMENT_POPULATE = [
   { path: 'dropoff.zone', select: 'name code' },
   { path: 'rider', select: 'firstName lastName phone code' },
   { path: 'client', select: 'name' },
+  ...(['fulfilment.originOffice', 'fulfilment.destinationOffice', 'currentOffice'] as const).map(
+    (path) => ({
+      path,
+      select: 'name code zone address landmark phone openingHours',
+      populate: { path: 'zone', select: 'city state' },
+    }),
+  ),
+  { path: 'manifest', select: 'code' },
 ];
+
+type OfficeRef = {
+  _id: Types.ObjectId;
+  name: string;
+  code: string;
+  address: string;
+  landmark?: string;
+  phone: string;
+  openingHours: string;
+  zone?: { city?: string };
+};
+const asOffice = (v: unknown) =>
+  v && typeof v === 'object' && 'code' in v ? (v as OfficeRef) : null;
+const officeRef = (v: unknown) => {
+  const o = asOffice(v);
+  return o ? { id: o._id.toString(), name: o.name, code: o.code, city: o.zone?.city ?? '' } : null;
+};
+
+export function toFulfilmentDto(o: IShipment): ShipmentDto['fulfilment'] {
+  const f = o.fulfilment ?? { originMode: 'pickup', deliveryMode: 'door', interstate: false };
+  const manifest = o.manifest as unknown as { _id: Types.ObjectId; code: string } | null;
+  return {
+    originMode: f.originMode,
+    deliveryMode: f.deliveryMode,
+    interstate: f.interstate,
+    originOffice: officeRef(f.originOffice),
+    destinationOffice: officeRef(f.destinationOffice),
+    currentOffice: officeRef(o.currentOffice),
+    manifest:
+      manifest && 'code' in manifest ? { id: manifest._id.toString(), code: manifest.code } : null,
+  };
+}
 
 const toStopDto = (s: IStop): StopDto => {
   const zone = s.zone as unknown as ZoneRef;
@@ -54,6 +94,7 @@ export function toShipmentDto(o: IShipment): ShipmentDto {
     serviceLevel: o.serviceLevel,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
+    fulfilment: toFulfilmentDto(o),
     amountPaid: o.amountPaid ?? 0,
     balanceDue: payableAmount(o) - (o.amountPaid ?? 0),
     estimate: { lines: o.estimate.lines, subtotal: o.estimate.subtotal, total: o.estimate.total },
@@ -98,6 +139,27 @@ export function toPublicTrackingDto(o: IShipment): PublicTrackingDto {
     riderFirstName: rider?.firstName,
     events: o.events.map((e) => ({ status: e.status, at: e.at.toISOString() })),
     createdAt: o.createdAt.toISOString(),
+    fulfilment: publicFulfilment(o),
+  };
+}
+
+function publicFulfilment(o: IShipment): PublicTrackingDto['fulfilment'] {
+  const f = o.fulfilment ?? { originMode: 'pickup', deliveryMode: 'door', interstate: false };
+  const dest = f.deliveryMode === 'collection' ? asOffice(f.destinationOffice) : null;
+  return {
+    originMode: f.originMode,
+    deliveryMode: f.deliveryMode,
+    interstate: f.interstate,
+    destinationOffice: dest
+      ? {
+          name: dest.name,
+          address: dest.address,
+          landmark: dest.landmark,
+          phone: dest.phone,
+          openingHours: dest.openingHours,
+          city: dest.zone?.city ?? '',
+        }
+      : null,
   };
 }
 

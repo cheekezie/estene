@@ -13,11 +13,14 @@ const TRANSITIONS: Record<ShipmentStatus, readonly Transition[]> = {
   awaiting_payment: [{ to: 'cancelled', by: ['admin', 'customer'] }],
   created: [
     { to: 'assigned', by: ['admin', 'rider'] },
+    { to: 'at_hub', by: ['admin'] }, // sender dropped it at an office
     { to: 'cancelled', by: ['admin', 'customer', 'client'] },
   ],
   assigned: [
     { to: 'en_route_to_pickup', by: ['rider'] },
     { to: 'created', by: ['admin', 'rider'] }, // unassign / rider declines after accepting
+    { to: 'at_hub', by: ['admin', 'rider'] }, // last-mile rider taken off — parcel stays at the office
+    { to: 'out_for_delivery', by: ['rider'] }, // last-mile rider collected it from the office
     { to: 'cancelled', by: ['admin', 'customer', 'client'] },
   ],
   en_route_to_pickup: [
@@ -28,12 +31,25 @@ const TRANSITIONS: Record<ShipmentStatus, readonly Transition[]> = {
   picked_up: [
     { to: 'in_transit', by: ['rider'] },
     { to: 'out_for_delivery', by: ['rider'] }, // same-zone trips go straight out
+    { to: 'at_hub', by: ['admin'] }, // rider handed it in at an office
   ],
   in_transit: [
     { to: 'at_hub', by: ['rider', 'admin'] },
     { to: 'out_for_delivery', by: ['rider'] },
   ],
-  at_hub: [{ to: 'out_for_delivery', by: ['rider', 'admin'] }],
+  at_hub: [
+    { to: 'in_transit', by: ['admin'] }, // left on a manifest to another office
+    { to: 'assigned', by: ['admin', 'rider'] }, // last-mile rider accepted
+    { to: 'ready_for_collection', by: ['admin'] },
+    { to: 'out_for_delivery', by: ['rider', 'admin'] },
+    { to: 'returned', by: ['admin'] },
+  ],
+  ready_for_collection: [
+    { to: 'collected', by: ['admin'] },
+    { to: 'at_hub', by: ['admin'] }, // switched to door delivery, or moved
+    { to: 'returned', by: ['admin'] }, // never collected
+  ],
+  collected: [],
   out_for_delivery: [
     { to: 'delivered', by: ['rider'] },
     { to: 'delivery_failed', by: ['rider'] },
@@ -56,7 +72,12 @@ export const canTransition = (
 export const nextStatuses = (from: ShipmentStatus, actor: ActorType): ShipmentStatus[] =>
   TRANSITIONS[from].filter((t) => t.by.includes(actor)).map((t) => t.to);
 
-export const TERMINAL_STATUSES: readonly ShipmentStatus[] = ['delivered', 'returned', 'cancelled'];
+export const TERMINAL_STATUSES: readonly ShipmentStatus[] = [
+  'delivered',
+  'collected',
+  'returned',
+  'cancelled',
+];
 export const isTerminal = (s: ShipmentStatus) => TERMINAL_STATUSES.includes(s);
 
 /** Statuses where a rider is actively holding or heading to the parcel. */
@@ -121,10 +142,25 @@ export const SHIPMENT_STATUS_META: Record<
     notifyReceiver: false,
   },
   at_hub: {
-    label: 'At hub',
-    description: 'Your parcel has arrived at a sorting hub.',
+    label: 'At Estene office',
+    description: 'Your parcel is safely at an Estene office.',
     tone: 'progress',
-    notify: false,
+    notify: true,
+    notifyReceiver: false,
+  },
+  ready_for_collection: {
+    label: 'Ready for collection',
+    description:
+      'Your parcel is waiting at the Estene office. Bring the delivery PIN to collect it.',
+    tone: 'info',
+    notify: true,
+    notifyReceiver: true,
+  },
+  collected: {
+    label: 'Collected',
+    description: 'The parcel was collected at the Estene office.',
+    tone: 'success',
+    notify: true,
     notifyReceiver: false,
   },
   out_for_delivery: {
@@ -164,12 +200,61 @@ export const SHIPMENT_STATUS_META: Record<
   },
 };
 
-/** The happy-path milestones shown as a progress tracker on the public site. */
-export const TRACKING_MILESTONES: readonly ShipmentStatus[] = [
-  'created',
-  'assigned',
-  'picked_up',
-  'in_transit',
-  'out_for_delivery',
-  'delivered',
-];
+export type TrackingMilestone = {
+  status: ShipmentStatus;
+  /** Which occurrence of the status counts (interstate parcels hit `at_hub` twice). */
+  occurrence: 1 | 2;
+  label: string;
+};
+
+export type FulfilmentShape = {
+  originMode: 'pickup' | 'dropoff';
+  deliveryMode: 'door' | 'collection';
+  interstate: boolean;
+};
+
+/** The happy-path steps shown on the tracking page, which depend on how the parcel travels. */
+export function trackingMilestones(f: FulfilmentShape): TrackingMilestone[] {
+  const viaOffice = f.originMode === 'dropoff' || f.deliveryMode === 'collection' || f.interstate;
+  const steps: TrackingMilestone[] = [{ status: 'created', occurrence: 1, label: 'Booked' }];
+  if (f.originMode === 'pickup') {
+    steps.push(
+      { status: 'assigned', occurrence: 1, label: 'Rider assigned' },
+      { status: 'picked_up', occurrence: 1, label: 'Picked up' },
+    );
+  }
+  if (!viaOffice) {
+    steps.push({ status: 'in_transit', occurrence: 1, label: 'In transit' });
+  } else {
+    steps.push({
+      status: 'at_hub',
+      occurrence: 1,
+      label: f.originMode === 'dropoff' ? 'Dropped off at office' : 'At Estene office',
+    });
+    if (f.interstate) {
+      steps.push(
+        { status: 'in_transit', occurrence: 1, label: 'On the way between states' },
+        { status: 'at_hub', occurrence: 2, label: 'At destination office' },
+      );
+    }
+  }
+  if (f.deliveryMode === 'collection') {
+    steps.push(
+      { status: 'ready_for_collection', occurrence: 1, label: 'Ready for collection' },
+      { status: 'collected', occurrence: 1, label: 'Collected' },
+    );
+  } else {
+    steps.push(
+      { status: 'out_for_delivery', occurrence: 1, label: 'Out for delivery' },
+      { status: 'delivered', occurrence: 1, label: 'Delivered' },
+    );
+  }
+  return steps;
+}
+
+/** Door-to-door within one city — the original flow. */
+export const TRACKING_MILESTONES: readonly ShipmentStatus[] = trackingMilestones({
+  originMode: 'pickup',
+  deliveryMode: 'door',
+  interstate: false,
+}).map((m) => m.status);

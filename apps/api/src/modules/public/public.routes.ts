@@ -8,6 +8,7 @@ import { PricingService } from '../pricing/pricing.service';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { ZonesService } from '../zones/zones.service';
+import { OfficesService } from '../offices/offices.service';
 
 const TrackingParams = z.object({ trackingNumber: z.string().trim().min(6).max(20) });
 const RefParams = z.object({ reference: z.string().trim().min(6).max(40) });
@@ -21,9 +22,19 @@ export async function publicRoutes(app: FastifyInstance) {
     const zones = await ZonesService.list({ activeOnly: true });
     return send(
       reply,
-      zones.map(({ id, name, code, areas }) => ({ id, name, code, areas })),
+      zones.map(({ id, name, code, areas, city, state }) => ({
+        id,
+        name,
+        code,
+        areas,
+        city,
+        state,
+      })),
     );
   });
+
+  /** Offices for drop-off and collection. */
+  app.get('/offices', async (_req, reply) => send(reply, await OfficesService.listPublic()));
 
   app.post(
     '/quote',

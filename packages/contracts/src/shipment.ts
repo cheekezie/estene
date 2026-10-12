@@ -6,6 +6,10 @@ import {
   PARCEL_SIZES,
   PAYMENT_METHODS,
   SERVICE_LEVELS,
+  ORIGIN_MODES,
+  DELIVERY_MODES,
+  type DeliveryMode,
+  type OriginMode,
   type ShipmentSource,
   type DeliveryProofMethod,
   type ShipmentStatus,
@@ -43,12 +47,17 @@ export const QuoteRequestSchema = z.object({
 });
 export type QuoteRequest = z.infer<typeof QuoteRequestSchema>;
 
+/**
+ * A pickup or drop-off point. Zone/area/address are optional here because an
+ * office drop-off or collection replaces them with the office's details — the
+ * mode rules below make them required otherwise.
+ */
 const StopSchema = z.object({
   contactName: z.string().trim().min(2),
   phone: NigerianPhoneSchema,
-  zoneId: ObjectIdSchema,
-  area: z.string().trim().min(2),
-  address: z.string().trim().min(5).max(300),
+  zoneId: ObjectIdSchema.optional(),
+  area: z.string().trim().min(2).optional(),
+  address: z.string().trim().min(5).max(300).optional(),
   landmark: z.string().trim().max(120).optional(),
   location: GeoPointSchema.optional(),
 });
@@ -57,11 +66,52 @@ export type StopInput = z.infer<typeof StopSchema>;
 const ShipmentBaseSchema = z.object({
   pickup: StopSchema,
   dropoff: StopSchema,
+  /** pickup = a rider collects; dropoff = the sender brings it to `originOfficeId`. */
+  originMode: z.enum(ORIGIN_MODES).default('pickup'),
+  originOfficeId: ObjectIdSchema.optional(),
+  /** door = a rider delivers; collection = the recipient collects at `destinationOfficeId`. */
+  deliveryMode: z.enum(DELIVERY_MODES).default('door'),
+  destinationOfficeId: ObjectIdSchema.optional(),
   parcel: ParcelDetailsSchema,
   serviceLevel: z.enum(SERVICE_LEVELS).default('standard'),
   senderEmail: z.email().trim().toLowerCase().optional(),
   notes: z.string().trim().max(500).optional(),
 });
+
+type ModeShape = Pick<
+  z.output<typeof ShipmentBaseSchema>,
+  'pickup' | 'dropoff' | 'originMode' | 'originOfficeId' | 'deliveryMode' | 'destinationOfficeId'
+>;
+
+/** Offices replace addresses; everything else needs a full address. Applied to every booking schema. */
+function checkModes(s: ModeShape, ctx: z.RefinementCtx) {
+  const need = (stop: 'pickup' | 'dropoff') => {
+    for (const field of ['zoneId', 'area', 'address'] as const) {
+      if (!s[stop][field])
+        ctx.addIssue({
+          code: 'custom',
+          path: [stop, field],
+          message: field === 'address' ? 'Enter the address' : 'Choose an area',
+        });
+    }
+  };
+  if (s.originMode === 'dropoff') {
+    if (!s.originOfficeId)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['originOfficeId'],
+        message: 'Choose the office you will drop it at',
+      });
+  } else need('pickup');
+  if (s.deliveryMode === 'collection') {
+    if (!s.destinationOfficeId)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['destinationOfficeId'],
+        message: 'Choose the office they will collect from',
+      });
+  } else need('dropoff');
+}
 
 /** What every shipment-creating path hands to the service, whichever channel it came from. */
 export type NewShipmentInput = z.infer<typeof ShipmentBaseSchema> & {
@@ -72,20 +122,24 @@ const PaymentMethodSchema = z.enum(PAYMENT_METHODS);
 /** Public website booking. */
 export const CreateShipmentSchema = ShipmentBaseSchema.extend({
   paymentMethod: z.enum(CUSTOMER_PAYMENT_METHODS),
-}).refine((s) => s.paymentMethod !== 'online' || !!s.senderEmail, {
-  path: ['senderEmail'],
-  message: 'Add an email for your payment receipt',
-});
+})
+  .superRefine(checkModes)
+  .refine((s) => s.paymentMethod !== 'online' || !!s.senderEmail, {
+    path: ['senderEmail'],
+    message: 'Add an email for your payment receipt',
+  });
 export type CreateShipmentInput = z.infer<typeof CreateShipmentSchema>;
 
 /** Phone booking keyed in by staff — optionally on behalf of a business client. */
 export const AdminCreateShipmentSchema = ShipmentBaseSchema.extend({
   paymentMethod: PaymentMethodSchema,
   clientId: ObjectIdSchema.optional(),
-}).refine((o) => o.paymentMethod !== 'on_account' || !!o.clientId, {
-  path: ['paymentMethod'],
-  message: 'Only business clients can be billed on account',
-});
+})
+  .superRefine(checkModes)
+  .refine((o) => o.paymentMethod !== 'on_account' || !!o.clientId, {
+    path: ['paymentMethod'],
+    message: 'Only business clients can be billed on account',
+  });
 export type AdminCreateShipmentInput = z.infer<typeof AdminCreateShipmentSchema>;
 
 /**
@@ -95,7 +149,7 @@ export type AdminCreateShipmentInput = z.infer<typeof AdminCreateShipmentSchema>
 export const ApiCreateShipmentSchema = ShipmentBaseSchema.extend({
   paymentMethod: z.enum(CLIENT_PAYMENT_METHODS).default('on_account'),
   clientReference: z.string().trim().min(1).max(64).optional(),
-});
+}).superRefine(checkModes);
 export type ApiCreateShipmentInput = z.infer<typeof ApiCreateShipmentSchema>;
 
 export const ShipmentListQuerySchema = PaginationQuerySchema.extend({
@@ -174,6 +228,7 @@ export type ShipmentDto = {
   serviceLevel: ServiceLevel;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  fulfilment: FulfilmentDto;
   estimate: Quote;
   /** Set once the rider confirms the parcel at pickup. */
   finalAmount?: number;
@@ -199,6 +254,20 @@ export type PublicTrackingDto = {
   riderFirstName?: string;
   events: { status: ShipmentStatus; at: string }[];
   createdAt: string;
+  fulfilment: {
+    originMode: OriginMode;
+    deliveryMode: DeliveryMode;
+    interstate: boolean;
+    /** Where to collect — shown to the recipient once it's ready. */
+    destinationOffice: {
+      name: string;
+      address: string;
+      landmark?: string;
+      phone: string;
+      openingHours: string;
+      city: string;
+    } | null;
+  };
   /** Present while money is owed — lets the sender pay from the tracking page. */
   payment?: {
     balanceDue: number;
@@ -258,4 +327,17 @@ export type IntegrationShipmentDto = {
   events: { status: ShipmentStatus; at: string; note: string | null }[];
   createdAt: string;
   updatedAt: string;
+};
+
+type OfficeRef = { id: string; name: string; code: string; city: string };
+
+export type FulfilmentDto = {
+  originMode: OriginMode;
+  deliveryMode: DeliveryMode;
+  interstate: boolean;
+  originOffice: OfficeRef | null;
+  destinationOffice: OfficeRef | null;
+  /** The office holding the parcel right now, if any. */
+  currentOffice: OfficeRef | null;
+  manifest: { id: string; code: string } | null;
 };

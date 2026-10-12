@@ -26,6 +26,13 @@ export const templates = {
   receiverOutForDelivery: (tn: string, pin: string) =>
     `Estene: your parcel ${tn} is out for delivery. Give the rider PIN ${pin} on arrival. Never share it before you receive the parcel.`,
 
+  receiverReadyForCollection: (
+    tn: string,
+    office: { name: string; address: string; openingHours: string },
+    pin: string,
+  ) =>
+    `Estene: parcel ${tn} is ready to collect at ${office.name}, ${office.address} (${office.openingHours}). Show PIN ${pin} at the counter.`,
+
   receiverDelivered: (tn: string) =>
     `Estene: parcel ${tn} has been delivered. Thank you for using Estene.`,
 

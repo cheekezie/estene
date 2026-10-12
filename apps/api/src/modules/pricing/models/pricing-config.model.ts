@@ -21,6 +21,7 @@ const pricingConfigSchema = new Schema<IPricingConfig>(
     key: { type: String, required: true, unique: true, default: 'default' },
     version: { type: Number, default: 1 },
     defaultRouteFare: { type: Number, required: true },
+    interstateFare: { type: Number, default: 450_000 },
     sizeFees: { type: Schema.Types.Mixed, required: true },
     includedKg: { type: Number, required: true },
     perKgFee: { type: Number, required: true },

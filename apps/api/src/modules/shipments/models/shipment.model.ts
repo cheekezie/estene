@@ -3,6 +3,10 @@ import {
   ACTOR_TYPES,
   DELIVERY_PROOF_METHODS,
   SHIPMENT_SOURCES,
+  ORIGIN_MODES,
+  DELIVERY_MODES,
+  type OriginMode,
+  type DeliveryMode,
   SHIPMENT_STATUSES,
   PARCEL_SIZES,
   PAYMENT_METHODS,
@@ -84,6 +88,28 @@ export interface IShipment {
   senderEmail?: string;
   notes?: string;
   events: IShipmentEvent[];
+  /** How the parcel travels. Offices are set whenever it passes through one. */
+  fulfilment: {
+    originMode: OriginMode;
+    deliveryMode: DeliveryMode;
+    interstate: boolean;
+    originOffice?: Types.ObjectId | null;
+    destinationOffice?: Types.ObjectId | null;
+  };
+  /** The office holding the parcel right now (null while with a rider or in transit). */
+  currentOffice?: Types.ObjectId | null;
+  manifest?: Types.ObjectId | null;
+  /**
+   * Each rider job on this shipment: one `full` leg for door-to-door, or a
+   * `first_mile` (to the office) and `last_mile` (from it). Partner riders are
+   * paid per leg from `fare`.
+   */
+  riderLegs: {
+    rider: Types.ObjectId;
+    kind: 'full' | 'first_mile' | 'last_mile';
+    fare: number;
+    completedAt: Date;
+  }[];
   deliveredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -164,6 +190,24 @@ const shipmentSchema = new Schema<IShipment>(
         actorType: { type: String, enum: [...ACTOR_TYPES, 'system'], required: true },
         actorId: Schema.Types.ObjectId,
         at: { type: Date, default: Date.now },
+      },
+    ],
+    fulfilment: {
+      originMode: { type: String, enum: ORIGIN_MODES, default: 'pickup' },
+      deliveryMode: { type: String, enum: DELIVERY_MODES, default: 'door' },
+      interstate: { type: Boolean, default: false },
+      originOffice: { type: Schema.Types.ObjectId, ref: 'Office', default: null },
+      destinationOffice: { type: Schema.Types.ObjectId, ref: 'Office', default: null },
+    },
+    currentOffice: { type: Schema.Types.ObjectId, ref: 'Office', default: null, index: true },
+    manifest: { type: Schema.Types.ObjectId, ref: 'Manifest', default: null },
+    riderLegs: [
+      {
+        _id: false,
+        rider: { type: Schema.Types.ObjectId, ref: 'Rider', required: true },
+        kind: { type: String, enum: ['full', 'first_mile', 'last_mile'], required: true },
+        fare: { type: Number, required: true },
+        completedAt: { type: Date, default: Date.now },
       },
     ],
     deliveredAt: Date,

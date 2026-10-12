@@ -7,6 +7,8 @@ export interface IAdmin {
   email: string;
   passwordHash: string;
   role: AdminRole;
+  /** Office agents work at one office. */
+  office?: Types.ObjectId | null;
   isActive: boolean;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -19,6 +21,7 @@ const adminSchema = new Schema<IAdmin>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: ADMIN_ROLES, required: true },
+    office: { type: Schema.Types.ObjectId, ref: 'Office', default: null },
     isActive: { type: Boolean, default: true },
     lastLoginAt: Date,
   },

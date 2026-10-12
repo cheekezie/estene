@@ -35,9 +35,13 @@ export function summarize(
     case 'shipment.in_transit':
       return `${Id} is in transit to ${s.dropoff.area}.`;
     case 'shipment.at_hub':
-      return `${Id} arrived at a sorting hub.`;
+      return `${Id} is at an Estene office.`;
     case 'shipment.out_for_delivery':
       return `${Id} is out for delivery to ${recipient} in ${s.dropoff.area}.`;
+    case 'shipment.ready_for_collection':
+      return `${Id} is ready for ${recipient} to collect at the Estene office in ${s.dropoff.area}.`;
+    case 'shipment.collected':
+      return `${Id} was collected by ${s.proofOfDelivery?.receivedBy ?? recipient} at the Estene office.`;
     case 'shipment.delivered':
       return `${Id} was delivered to ${s.proofOfDelivery?.receivedBy ?? recipient} in ${s.dropoff.area}.`;
     case 'shipment.delivery_failed':

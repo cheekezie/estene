@@ -1,6 +1,7 @@
 import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { bus } from '../../lib/events';
 import { getQueue, startWorker } from '../../lib/queue';
+import { OfficeModel } from '../offices/models/office.model';
 import { PaymentModel } from '../payments/models/payment.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
@@ -84,7 +85,7 @@ export function registerNotifications() {
 
     const shipment = await ShipmentModel.findById(
       shipmentId,
-      'trackingNumber pickup.phone pickup.contactName dropoff.phone',
+      'trackingNumber pickup.phone pickup.contactName dropoff.phone currentOffice fulfilment',
     ).lean();
     if (!shipment) return;
     const tn = shipment.trackingNumber;
@@ -97,8 +98,18 @@ export function registerNotifications() {
         shipmentId,
       });
 
-    if (meta.notifyReceiver) {
+    // A drop-off at the counter is the recipient's "picked up" moment.
+    const droppedOff = to === 'at_hub' && from === 'created';
+    if (meta.notifyReceiver || droppedOff) {
       let body: string | null = null;
+      if (droppedOff) body = templates.receiverPickedUp(tn, shipment.pickup.contactName);
+      if (to === 'ready_for_collection' && shipment.currentOffice) {
+        const [office, pin] = await Promise.all([
+          OfficeModel.findById(shipment.currentOffice, 'name address openingHours').lean(),
+          ShipmentsService.deliveryPin(shipmentId),
+        ]);
+        if (office && pin) body = templates.receiverReadyForCollection(tn, office, pin);
+      }
       if (to === 'picked_up') body = templates.receiverPickedUp(tn, shipment.pickup.contactName);
       if (to === 'out_for_delivery') {
         const pin = await ShipmentsService.deliveryPin(shipmentId);

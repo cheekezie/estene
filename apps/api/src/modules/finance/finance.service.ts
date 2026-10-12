@@ -103,14 +103,26 @@ export const FinanceService = {
   },
 
   /**
-   * Books a delivered shipment. Company riders are salaried, so the whole fare is
-   * platform revenue; partner riders keep the fare minus our commission.
+   * Books a completed shipment (delivered or collected). Each rider leg is
+   * paid on its own fare: partner riders keep it minus commission; company
+   * riders are salaried. Whatever isn't paid to partners is Estene revenue.
+   * Door-to-door has one `full` leg, so it books exactly as before.
    */
   async recordDelivery(shipmentId: string) {
     const shipment = await ShipmentModel.findById(shipmentId).lean();
-    if (!shipment?.rider) return;
-    const rider = await RiderModel.findById(shipment.rider, 'type commissionPct').lean();
-    if (!rider) return;
+    if (!shipment) return;
+    const legs = shipment.riderLegs?.length
+      ? shipment.riderLegs
+      : shipment.rider
+        ? [
+            {
+              rider: shipment.rider,
+              kind: 'full' as const,
+              fare: payableAmount(shipment),
+              completedAt: new Date(),
+            },
+          ]
+        : [];
 
     const amount = payableAmount(shipment);
     const base = { shipment: shipment._id };
@@ -125,9 +137,21 @@ export const FinanceService = {
       },
     ];
 
-    if (rider.type === 'partner') {
-      const pct = rider.commissionPct ?? (await PricingService.getConfig()).partnerCommissionPct;
-      const commission = Math.round((amount * pct) / 100);
+    const riders = await RiderModel.find(
+      { _id: { $in: legs.map((l) => l.rider) } },
+      'type commissionPct',
+    ).lean();
+    const defaultPct = (await PricingService.getConfig()).partnerCommissionPct;
+    let paidToPartners = 0;
+
+    legs.forEach((leg, i) => {
+      const rider = riders.find((r) => String(r._id) === String(leg.rider));
+      if (rider?.type !== 'partner') return;
+      const fare = Math.min(leg.fare, amount - paidToPartners);
+      if (fare <= 0) return;
+      const pct = rider.commissionPct ?? defaultPct;
+      const commission = Math.round((fare * pct) / 100);
+      paidToPartners += fare;
       entries.push(
         {
           ...base,
@@ -135,25 +159,28 @@ export const FinanceService = {
           amount: commission,
           account: 'platform',
           rider: rider._id,
-          idempotencyKey: `${shipmentId}:platform_revenue`,
-          note: `${pct}% commission`,
+          idempotencyKey: `${shipmentId}:leg${i}:commission`,
+          note: `${pct}% commission · ${leg.kind.replace('_', ' ')}`,
         },
         {
           ...base,
           type: 'rider_earning',
-          amount: amount - commission,
+          amount: fare - commission,
           account: 'rider',
           rider: rider._id,
-          idempotencyKey: `${shipmentId}:rider_earning`,
+          idempotencyKey: `${shipmentId}:leg${i}:earning`,
+          note: leg.kind.replace('_', ' '),
         },
       );
-    } else {
+    });
+
+    const remainder = amount - paidToPartners;
+    if (remainder > 0) {
       entries.push({
         ...base,
         type: 'platform_revenue',
-        amount,
+        amount: remainder,
         account: 'platform',
-        rider: rider._id,
         idempotencyKey: `${shipmentId}:platform_revenue`,
       });
     }

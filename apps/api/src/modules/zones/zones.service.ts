@@ -8,6 +8,7 @@ export const toZoneDto = (z: IZone): ZoneDto => ({
   name: z.name,
   code: z.code,
   city: z.city,
+  state: z.state ?? 'FCT',
   areas: z.areas,
   center: { lng: z.center.coordinates[0], lat: z.center.coordinates[1] },
   radiusKm: z.radiusKm,
@@ -18,7 +19,9 @@ export const toZoneDto = (z: IZone): ZoneDto => ({
 
 const toDoc = (input: Partial<ZoneInput>) => {
   const { center, ...rest } = input;
-  return center ? { ...rest, center: { type: 'Point' as const, coordinates: [center.lng, center.lat] } } : rest;
+  return center
+    ? { ...rest, center: { type: 'Point' as const, coordinates: [center.lng, center.lat] } }
+    : rest;
 };
 
 export const ZonesService = {
@@ -34,12 +37,16 @@ export const ZonesService = {
   },
 
   async create(input: ZoneInput) {
-    if (await ZoneModel.exists({ code: input.code })) throw conflict(`Zone code ${input.code} is taken`);
+    if (await ZoneModel.exists({ code: input.code }))
+      throw conflict(`Zone code ${input.code} is taken`);
     return toZoneDto(await ZoneModel.create(toDoc(input)));
   },
 
   async update(id: string, input: Partial<ZoneInput>) {
-    const zone = await ZoneModel.findByIdAndUpdate(id, toDoc(input), { new: true, runValidators: true });
+    const zone = await ZoneModel.findByIdAndUpdate(id, toDoc(input), {
+      new: true,
+      runValidators: true,
+    });
     if (!zone) throw notFound('Zone not found');
     return toZoneDto(zone);
   },

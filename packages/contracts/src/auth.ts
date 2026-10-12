@@ -24,6 +24,8 @@ export type TokenClaims = {
   sub: string;
   actor: ActorType;
   role?: AdminRole;
+  /** Office agents only: the office they work at. */
+  officeId?: string;
 };
 
 export type AuthSession<TUser> = { accessToken: string; user: TUser };
@@ -33,4 +35,5 @@ export type AdminProfile = {
   name: string;
   email: string;
   role: AdminRole;
+  office: { id: string; name: string; code: string } | null;
 };

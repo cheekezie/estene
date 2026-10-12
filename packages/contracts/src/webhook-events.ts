@@ -43,8 +43,9 @@ export const WEBHOOK_EVENT_META: Record<
     group: 'On the move',
   },
   'shipment.at_hub': {
-    title: 'At sorting hub',
-    description: 'The parcel arrived at a hub for an inter-zone handover.',
+    title: 'At Estene office',
+    description:
+      'The parcel is at an Estene office — after drop-off, or on arrival in the destination city.',
     group: 'On the move',
   },
   'shipment.out_for_delivery': {
@@ -52,9 +53,19 @@ export const WEBHOOK_EVENT_META: Record<
     description: 'The rider is taking the parcel to the recipient.',
     group: 'On the move',
   },
+  'shipment.ready_for_collection': {
+    title: 'Ready for collection',
+    description: 'Waiting at the destination office for the recipient to collect.',
+    group: 'Outcome',
+  },
   'shipment.delivered': {
     title: 'Delivered',
     description: 'Handed over, with PIN or photo proof.',
+    group: 'Outcome',
+  },
+  'shipment.collected': {
+    title: 'Collected',
+    description: 'The recipient collected it at the office, with their PIN.',
     group: 'Outcome',
   },
   'shipment.delivery_failed': {
@@ -91,6 +102,8 @@ export function webhookEventForStatus(
   to: ShipmentStatus,
 ): WebhookEvent | null {
   if (to === 'created') return from === 'awaiting_payment' ? null : 'shipment.rider_unassigned';
+  // A last-mile rider taken off the job leaves the parcel at the office.
+  if (to === 'at_hub' && from === 'assigned') return 'shipment.rider_unassigned';
   const map: Record<Exclude<ShipmentStatus, 'created' | 'awaiting_payment'>, WebhookEvent> = {
     assigned: 'shipment.rider_assigned',
     en_route_to_pickup: 'shipment.rider_en_route',
@@ -98,7 +111,9 @@ export function webhookEventForStatus(
     in_transit: 'shipment.in_transit',
     at_hub: 'shipment.at_hub',
     out_for_delivery: 'shipment.out_for_delivery',
+    ready_for_collection: 'shipment.ready_for_collection',
     delivered: 'shipment.delivered',
+    collected: 'shipment.collected',
     delivery_failed: 'shipment.delivery_failed',
     returned: 'shipment.returned',
     cancelled: 'shipment.cancelled',
