@@ -1,0 +1,1 @@
+{ "extends": "@estene/config/tsconfig/vite.json", "include": ["src"] }

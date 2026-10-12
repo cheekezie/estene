@@ -1,0 +1,17 @@
+{
+  "name": "@estene/lib",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-agnostic browser utilities. No React except the query-client factory's peer.",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "exports": {
+    "./utils": "./src/utils.ts",
+    "./date": "./src/date.ts",
+    "./errors": "./src/errors.ts",
+    "./query-client": "./src/query-client.ts"
+  },
+  "dependencies": { "clsx": "^2.1.1", "tailwind-merge": "^3.3.1" },
+  "peerDependencies": { "@tanstack/react-query": ">=5", "sonner": ">=2", "date-fns": ">=4" },
+  "devDependencies": { "@estene/config": "workspace:*", "@tanstack/react-query": "^5.87.0", "sonner": "^2.0.7", "date-fns": "^4.1.0" }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@estene/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "exports": { "./client": "./src/client.ts" },
+  "dependencies": { "@estene/lib": "workspace:*", "@estene/contracts": "workspace:*" },
+  "peerDependencies": { "axios": ">=1" },
+  "devDependencies": { "@estene/config": "workspace:*", "axios": "^1.12.0" }
+}
