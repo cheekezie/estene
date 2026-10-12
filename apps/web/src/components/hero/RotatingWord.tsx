@@ -1,21 +1,23 @@
 /**
- * Cycles through words with a vertical slide — CSS only. The first word is
- * repeated at the end so the loop wraps seamlessly. Screen readers get one
- * stable phrase via the sr-only span.
+ * Cycles four words in place: they share one grid cell (sized to the longest
+ * word, so the line never reflows) and take turns fading up and out. No
+ * overflow clipping, so descenders and neighbours can't be cut or peek in.
+ * CSS only — see `.word-cycle` in globals.css (built for exactly four words).
  */
-/** Exactly four words — the easing curve in globals.css (`.word-roller`) is built for four stops. */
 export function RotatingWord({ words }: { words: [string, string, string, string] }) {
-  const loop = [...words, words[0]];
   return (
-    <span className="relative inline-flex h-[1.15em] overflow-hidden align-top">
+    <span className="inline-grid align-baseline">
       <span className="sr-only">{words.join(', ')}</span>
-      <span aria-hidden className="word-roller flex flex-col">
-        {loop.map((w, i) => (
-          <span key={i} className="block h-[1.15em] leading-[1.15em] text-amber-400">
-            {w}
-          </span>
-        ))}
-      </span>
+      {words.map((w, i) => (
+        <span
+          key={w}
+          aria-hidden
+          className="word-cycle col-start-1 row-start-1 text-amber-400"
+          style={{ animationDelay: `${i * 2.5}s` }}
+        >
+          {w}
+        </span>
+      ))}
     </span>
   );
 }

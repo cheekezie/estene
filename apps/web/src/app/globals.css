@@ -11,33 +11,29 @@
 
 /* ── Hero motion ─────────────────────────────────────────────────────────── */
 
-/* Four words + the first repeated, so the end frame equals the start frame. */
-@keyframes word-roll {
-  from {
-    transform: translateY(0);
+/*
+ * Four words share a 10s loop; each starts 2.5s (25%) after the previous one.
+ * A word fades out over 25–28% while the next fades in over its own 0–3% —
+ * the same moment — so it's a true crossfade with no empty gap.
+ */
+@keyframes word-cycle {
+  0% {
+    opacity: 0;
+    transform: translateY(0.25em);
   }
-  to {
-    transform: translateY(-4.6em);
+  3%,
+  25% {
+    opacity: 1;
+    transform: none;
+  }
+  28%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.25em);
   }
 }
-.word-roller {
-  animation: word-roll 9s steps(4, end) infinite;
-}
-@supports (animation-timing-function: linear(0, 1)) {
-  /* Where supported: hold each word, then slide to the next. */
-  .word-roller {
-    animation-timing-function: linear(
-      0,
-      0 20%,
-      0.25 25%,
-      0.25 45%,
-      0.5 50%,
-      0.5 70%,
-      0.75 75%,
-      0.75 95%,
-      1 100%
-    );
-  }
+.word-cycle {
+  animation: word-cycle 10s ease-in-out infinite both;
 }
 
 @keyframes ticker {
@@ -66,8 +62,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ticker,
-  .word-roller,
   .status-swap {
     animation: none;
+  }
+  /* Show only the first word, still. */
+  .word-cycle {
+    animation: none;
+    opacity: 0;
+  }
+  .word-cycle:nth-child(2) {
+    opacity: 1;
   }
 }
