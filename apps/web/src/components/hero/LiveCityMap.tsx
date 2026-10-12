@@ -249,46 +249,46 @@ function StatusCallout({
   const [x, y] = stop.at;
   const below = y / MAP_H < 0.3;
   const align = x / MAP_W > 0.6 ? 'right' : x / MAP_W < 0.4 ? 'left' : 'center';
-  const PIN_GAP = 16; // px between pin and card
-  const shiftX = align === 'right' ? 'calc(-100% + 28px)' : align === 'left' ? '-28px' : '-50%';
+  const PIN_GAP = 11; // px between pin and card
+  const shiftX = align === 'right' ? 'calc(-100% + 20px)' : align === 'left' ? '-20px' : '-50%';
   const shiftY = below ? `${PIN_GAP}px` : `calc(-100% - ${PIN_GAP}px)`;
   const pointerX =
     align === 'right'
-      ? 'right-[22px]'
+      ? 'right-[15px]'
       : align === 'left'
-        ? 'left-[22px]'
+        ? 'left-[15px]'
         : 'left-1/2 -translate-x-1/2';
 
   return (
     // Outer box owns the position transform; the inner one owns the fade-in (both use `transform`).
     <div
-      className="absolute w-52"
+      className="absolute w-40"
       style={{
         left: `${(x / MAP_W) * 100}%`,
         top: `${(y / MAP_H) * 100}%`,
         transform: `translate(${shiftX}, ${shiftY})`,
       }}
     >
-      <div className="status-swap relative rounded-xl bg-white text-slate-900 shadow-xl shadow-black/30">
+      <div className="status-swap relative rounded-lg bg-white text-slate-900 shadow-lg shadow-black/30">
         <span
-          className={`absolute size-3 rotate-45 bg-white ${pointerX} ${below ? '-top-1.5' : '-bottom-1.5'}`}
+          className={`absolute size-2 rotate-45 bg-white ${pointerX} ${below ? '-top-1' : '-bottom-1'}`}
         />
-        <div className="relative flex items-center gap-2.5 p-2.5">
+        <div className="relative flex items-center gap-2 p-1.5 pr-2">
           <span
-            className={`grid size-8 shrink-0 place-items-center rounded-lg ${delivered ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-amber-950'}`}
+            className={`grid size-6 shrink-0 place-items-center rounded-md ${delivered ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-amber-950'}`}
           >
-            {delivered ? <CheckCircle2 className="size-4.5" /> : <Truck className="size-4" />}
+            {delivered ? <CheckCircle2 className="size-3.5" /> : <Truck className="size-3" />}
           </span>
           <span className="min-w-0">
-            <span className="block text-[13px] font-semibold leading-tight">
+            <span className="block text-[11px] font-semibold leading-tight">
               {delivered ? `Delivered · ${stop.name}` : 'Out for delivery'}
             </span>
-            <span className="block truncate text-[11px] text-slate-500">
+            <span className="block truncate text-[9.5px] leading-tight text-slate-500">
               {delivered ? 'Handed over with PIN' : `Musa → ${stop.name}`}
             </span>
           </span>
         </div>
-        <div className="relative h-1 overflow-hidden rounded-b-xl bg-slate-100">
+        <div className="relative h-0.5 overflow-hidden rounded-b-lg bg-slate-100">
           <span
             ref={progressRef}
             className={`block h-full ${delivered ? 'bg-emerald-500' : 'bg-amber-400'}`}
