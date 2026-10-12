@@ -161,6 +161,8 @@ Rider balance = earnings − payouts − cash held.
 
 ## Roadmap
 
+**Next:** fleet partners. Companies bring their own riders and bikes, with a fleet portal for trips, earnings, heatmaps and live location. See [`plans/fleet-partners.md`](plans/fleet-partners.md).
+
 1. **Rider app** (`apps/rider`, Expo):
    - login, online toggle with background location heartbeat, offer card with countdown
    - QR scan for pickup and delivery, PIN entry, photo capture
