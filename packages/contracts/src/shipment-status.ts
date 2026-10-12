@@ -9,6 +9,8 @@ import type { ActorType, ShipmentStatus } from './enums';
 type Transition = { to: ShipmentStatus; by: readonly ActorType[] };
 
 const TRANSITIONS: Record<ShipmentStatus, readonly Transition[]> = {
+  // Only the payment system releases a shipment for dispatch.
+  awaiting_payment: [{ to: 'cancelled', by: ['admin', 'customer'] }],
   created: [
     { to: 'assigned', by: ['admin', 'rider'] },
     { to: 'cancelled', by: ['admin', 'customer', 'client'] },
@@ -76,6 +78,13 @@ export const SHIPMENT_STATUS_META: Record<
   ShipmentStatus,
   { label: string; description: string; tone: StatusTone; notify: boolean; notifyReceiver: boolean }
 > = {
+  awaiting_payment: {
+    label: 'Awaiting payment',
+    description: 'Your booking is saved. We dispatch a rider as soon as payment is confirmed.',
+    tone: 'warning',
+    notify: false,
+    notifyReceiver: false,
+  },
   created: {
     label: 'Booked',
     description: 'We have your booking and are finding a rider.',

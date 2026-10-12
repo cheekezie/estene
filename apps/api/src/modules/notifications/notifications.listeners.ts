@@ -1,6 +1,7 @@
 import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { bus } from '../../lib/events';
 import { getQueue, startWorker } from '../../lib/queue';
+import { PaymentModel } from '../payments/models/payment.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { sms } from './channels/sms';
@@ -19,9 +20,53 @@ const queueSms = (job: SmsJob) => getQueue(QUEUE).add('sms', job);
  * so a slow SMS gateway never slows down a rider's scan.
  */
 export function registerNotifications() {
-  bus.on('shipment.created', async ({ shipmentId }) => {
-    const shipment = await ShipmentModel.findById(shipmentId, 'trackingNumber pickup.phone').lean();
+  // Phone bookings paid by transfer/online: send the payment details.
+  bus.on('payment.link_requested', async ({ shipmentId }) => {
+    const shipment = await ShipmentModel.findById(
+      shipmentId,
+      'trackingNumber pickup.phone paymentMethod',
+    ).lean();
     if (!shipment) return;
+    const va = await PaymentModel.findOne({
+      shipment: shipmentId,
+      channel: 'virtual_account',
+      status: 'pending',
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    const body =
+      shipment.paymentMethod === 'transfer' && va?.virtualAccount
+        ? templates.payByTransfer(shipment.trackingNumber, va.amount, va.virtualAccount)
+        : templates.payOnline(shipment.trackingNumber);
+    await queueSms({
+      to: shipment.pickup.phone,
+      body,
+      template: 'sender.payment_request',
+      shipmentId,
+    });
+  });
+
+  bus.on('payment.balance_requested', async ({ paymentId, shipmentId }) => {
+    const [shipment, payment] = await Promise.all([
+      ShipmentModel.findById(shipmentId, 'trackingNumber pickup.phone').lean(),
+      PaymentModel.findById(paymentId).lean(),
+    ]);
+    if (!shipment || !payment?.virtualAccount) return;
+    await queueSms({
+      to: shipment.pickup.phone,
+      body: templates.balanceDue(shipment.trackingNumber, payment.amount, payment.virtualAccount),
+      template: 'sender.balance_due',
+      shipmentId,
+    });
+  });
+
+  bus.on('shipment.created', async ({ shipmentId }) => {
+    const shipment = await ShipmentModel.findById(
+      shipmentId,
+      'trackingNumber pickup.phone status',
+    ).lean();
+    // Prepaid bookings get their "Booked" SMS once payment clears (see status_changed below).
+    if (!shipment || shipment.status === 'awaiting_payment') return;
     await queueSms({
       to: shipment.pickup.phone,
       body: templates.senderStatus(shipment.trackingNumber, 'created'),
@@ -30,9 +75,12 @@ export function registerNotifications() {
     });
   });
 
-  bus.on('shipment.status_changed', async ({ shipmentId, to }) => {
+  bus.on('shipment.status_changed', async ({ shipmentId, from, to }) => {
     const meta = SHIPMENT_STATUS_META[to];
     if (!meta.notify && !meta.notifyReceiver) return;
+    // Back to "created" means either payment cleared (announce the booking) or a rider
+    // was swapped (internal — the sender hears when the new rider accepts).
+    if (to === 'created' && from !== 'awaiting_payment') return;
 
     const shipment = await ShipmentModel.findById(
       shipmentId,

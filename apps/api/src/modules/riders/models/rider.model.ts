@@ -25,6 +25,14 @@ export interface IRider {
   coverageZones: Types.ObjectId[];
   commissionPct?: number;
   fleetName?: string;
+  /** Payout destination, name-checked with the bank before it's saved. */
+  bankAccount?: {
+    bankCode: string;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    verifiedAt: Date;
+  };
   onboardedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +54,13 @@ const riderSchema = new Schema<IRider>(
     coverageZones: [{ type: Schema.Types.ObjectId, ref: 'Zone', index: true }],
     commissionPct: Number,
     fleetName: String,
+    bankAccount: {
+      bankCode: String,
+      bankName: String,
+      accountNumber: String,
+      accountName: String,
+      verifiedAt: Date,
+    },
     onboardedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
   },
   { timestamps: true },

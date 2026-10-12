@@ -21,7 +21,12 @@ export type DomainEvents = {
     actorId: string;
   };
   'shipment.price_adjusted': { shipmentId: string; from: number; to: number; reason?: string };
-  'shipment.paid': { shipmentId: string };
+  /** Money in: a payment row just became successful. */
+  'payment.succeeded': { paymentId: string; shipmentId: string };
+  /** A prepaid shipment was re-priced upward and an account number was issued for the difference. */
+  'payment.balance_requested': { paymentId: string; shipmentId: string };
+  /** Staff booked a prepaid shipment by phone — the sender needs payment details by SMS. */
+  'payment.link_requested': { shipmentId: string };
   'dispatch.offered': { shipmentId: string; riderId: string; offerId: string; expiresAt: Date };
 };
 

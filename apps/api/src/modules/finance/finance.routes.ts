@@ -16,14 +16,13 @@ export async function financeRoutes(app: FastifyInstance) {
     return send(reply, await FinanceService.summary(from, to));
   });
 
-  app.get('/entries', async (req, reply) => send(reply, await FinanceService.entries(parse(LedgerQuerySchema, req.query))));
+  app.get('/entries', async (req, reply) =>
+    send(reply, await FinanceService.entries(parse(LedgerQuerySchema, req.query))),
+  );
 
-  app.get('/rider-balances', async (_req, reply) => send(reply, await FinanceService.riderBalances()));
-
-  app.post('/payouts', async (req, reply) => {
-    await FinanceService.recordPayout(parse(RiderMoneySchema, req.body), req.user.sub);
-    return send(reply, null, 201, 'Payout recorded');
-  });
+  app.get('/rider-balances', async (_req, reply) =>
+    send(reply, await FinanceService.riderBalances()),
+  );
 
   app.post('/remittances', async (req, reply) => {
     await FinanceService.recordRemittance(parse(RiderMoneySchema, req.body), req.user.sub);

@@ -81,12 +81,17 @@ export const webhookEventTitle = (type: string) =>
   WEBHOOK_EVENT_META[type as WebhookEvent]?.title ?? SYSTEM_EVENT_TITLES[type] ?? type;
 
 /**
- * Which event a status change produces. `created` is reached either at booking
- * (handled separately as `shipment.created`) or when a rider is taken off the job.
+ * Which event a status change produces, or null when integrators don't hear
+ * about it. `created` is reached at booking (sent separately as
+ * `shipment.created`), after online payment clears (no event — business
+ * clients don't prepay online), or when a rider is taken off the job.
  */
-export function webhookEventForStatus(to: ShipmentStatus): WebhookEvent {
-  if (to === 'created') return 'shipment.rider_unassigned';
-  const map: Record<Exclude<ShipmentStatus, 'created'>, WebhookEvent> = {
+export function webhookEventForStatus(
+  from: ShipmentStatus,
+  to: ShipmentStatus,
+): WebhookEvent | null {
+  if (to === 'created') return from === 'awaiting_payment' ? null : 'shipment.rider_unassigned';
+  const map: Record<Exclude<ShipmentStatus, 'created' | 'awaiting_payment'>, WebhookEvent> = {
     assigned: 'shipment.rider_assigned',
     en_route_to_pickup: 'shipment.rider_en_route',
     picked_up: 'shipment.picked_up',
@@ -98,5 +103,5 @@ export function webhookEventForStatus(to: ShipmentStatus): WebhookEvent {
     returned: 'shipment.returned',
     cancelled: 'shipment.cancelled',
   };
-  return map[to];
+  return to === 'awaiting_payment' ? null : map[to];
 }

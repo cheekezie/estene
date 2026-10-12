@@ -8,6 +8,8 @@ import {
   QuoteRequestSchema,
   UpdateShipmentStatusSchema,
 } from '@estene/contracts/shipment';
+import { bus } from '../../lib/events';
+import { PaymentsService } from '../payments/payments.service';
 import { PricingService } from '../pricing/pricing.service';
 import { toShipmentDto } from './shipments.mapper';
 import { parse, send } from '../../lib/response';
@@ -41,7 +43,15 @@ export async function shipmentsRoutes(app: FastifyInstance) {
       source: 'admin',
       clientId,
     });
-    return send(reply, toShipmentDto(shipment), 201, 'Shipment booked');
+    // Prepaid phone bookings: an account number staff can read out, or a pay link by SMS.
+    const payment =
+      shipment.paymentMethod === 'transfer'
+        ? { transfer: await PaymentsService.startTransfer(shipment.id, 'booking') }
+        : shipment.paymentMethod === 'online'
+          ? { checkout: await PaymentsService.startCheckout(shipment.id, 'booking') }
+          : null;
+    if (payment) bus.emit('payment.link_requested', { shipmentId: shipment.id });
+    return send(reply, { ...toShipmentDto(shipment), payment }, 201, 'Shipment booked');
   });
 
   app.post('/quote', async (req, reply) => {
@@ -93,13 +103,4 @@ export async function shipmentsRoutes(app: FastifyInstance) {
       'Shipment cancelled',
     );
   });
-
-  app.post('/:id/mark-paid', { preHandler: requireRole('finance') }, async (req, reply) =>
-    send(
-      reply,
-      await ShipmentsService.markPaid(parse(IdParams, req.params).id),
-      200,
-      'Payment recorded',
-    ),
-  );
 }

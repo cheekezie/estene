@@ -9,12 +9,14 @@ export function registerWebhooks() {
     WebhooksService.notifyShipmentEvent('shipment.created', shipmentId),
   );
 
-  bus.on('shipment.status_changed', ({ shipmentId, from, to }) =>
-    WebhooksService.notifyShipmentEvent(webhookEventForStatus(to), shipmentId, {
-      previousStatus: from,
-      status: to,
-    }),
-  );
+  bus.on('shipment.status_changed', async ({ shipmentId, from, to }) => {
+    const event = webhookEventForStatus(from, to);
+    if (event)
+      await WebhooksService.notifyShipmentEvent(event, shipmentId, {
+        previousStatus: from,
+        status: to,
+      });
+  });
 
   bus.on('shipment.price_adjusted', ({ shipmentId, from, to, reason }) =>
     WebhooksService.notifyShipmentEvent('shipment.price_adjusted', shipmentId, {

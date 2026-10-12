@@ -6,6 +6,8 @@ import { redis } from './lib/redis';
 import { registerDispatch } from './modules/dispatch/dispatch.listeners';
 import { registerFinance } from './modules/finance/finance.listeners';
 import { registerNotifications } from './modules/notifications/notifications.listeners';
+import { registerPayments } from './modules/payments/payments.listeners';
+import { registerPayouts } from './modules/payouts/payouts.listeners';
 import { registerWebhooks } from './modules/webhooks/webhooks.listeners';
 
 async function start() {
@@ -16,6 +18,8 @@ async function start() {
   registerNotifications();
   registerFinance();
   registerWebhooks();
+  registerPayments();
+  registerPayouts();
 
   const app = await buildApp();
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

@@ -21,6 +21,7 @@ import {
   PaginationQuerySchema,
 } from './common';
 import type { Quote } from './pricing';
+import type { VirtualAccountDto } from './payment';
 
 const ParcelDetailsSchema = z.object({
   size: z.enum(PARCEL_SIZES),
@@ -71,6 +72,9 @@ const PaymentMethodSchema = z.enum(PAYMENT_METHODS);
 /** Public website booking. */
 export const CreateShipmentSchema = ShipmentBaseSchema.extend({
   paymentMethod: z.enum(CUSTOMER_PAYMENT_METHODS),
+}).refine((s) => s.paymentMethod !== 'online' || !!s.senderEmail, {
+  path: ['senderEmail'],
+  message: 'Add an email for your payment receipt',
 });
 export type CreateShipmentInput = z.infer<typeof CreateShipmentSchema>;
 
@@ -173,6 +177,10 @@ export type ShipmentDto = {
   estimate: Quote;
   /** Set once the rider confirms the parcel at pickup. */
   finalAmount?: number;
+  /** Kobo received so far across all successful payments. */
+  amountPaid: number;
+  /** Kobo still owed (0 when settled; negative = refund due). */
+  balanceDue: number;
   adjustment?: { from: number; to: number; reason?: string; at: string };
   rider?: { id: string; name: string; phone: string; code: string } | null;
   tagCode?: string;
@@ -191,6 +199,12 @@ export type PublicTrackingDto = {
   riderFirstName?: string;
   events: { status: ShipmentStatus; at: string }[];
   createdAt: string;
+  /** Present while money is owed — lets the sender pay from the tracking page. */
+  payment?: {
+    balanceDue: number;
+    reason: 'booking' | 'price_adjusted';
+    virtualAccount: VirtualAccountDto | null;
+  };
 };
 
 /**

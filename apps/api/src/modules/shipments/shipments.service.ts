@@ -1,5 +1,10 @@
 import type { FilterQuery, UpdateQuery } from 'mongoose';
-import type { ActorType, ShipmentSource, ShipmentStatus } from '@estene/contracts/enums';
+import {
+  isPrepaid,
+  type ActorType,
+  type ShipmentSource,
+  type ShipmentStatus,
+} from '@estene/contracts/enums';
 import type {
   ConfirmDeliveryInput,
   ConfirmPickupInput,
@@ -156,6 +161,7 @@ export const ShipmentsService = {
       ...input.parcel,
     });
 
+    const initialStatus = isPrepaid(input.paymentMethod) ? 'awaiting_payment' : 'created';
     let shipment: ShipmentDoc;
     try {
       shipment = await ShipmentModel.create({
@@ -172,7 +178,11 @@ export const ShipmentsService = {
         pinCipher: encrypt(randomPin()),
         senderEmail: input.senderEmail,
         notes: input.notes,
-        events: [{ status: 'created', actorType: actor.type, actorId: actor.id, at: new Date() }],
+        // Prepaid bookings wait for the gateway; everything else goes straight to dispatch.
+        status: initialStatus,
+        events: [
+          { status: initialStatus, actorType: actor.type, actorId: actor.id, at: new Date() },
+        ],
       });
     } catch (err) {
       // Two concurrent retries with the same reference: the loser returns the winner's shipment.
@@ -343,7 +353,6 @@ export const ShipmentsService = {
                   by: riderId,
                 },
               }),
-              ...(shipment.paymentMethod === 'cash_on_pickup' && { paymentStatus: 'paid' }),
             },
           },
         },
@@ -379,6 +388,15 @@ export const ShipmentsService = {
   /** Rider at drop-off: rescans the tag, then proves delivery with the recipient's PIN or a photo. */
   async confirmDelivery(shipmentId: string, riderId: string, input: ConfirmDeliveryInput) {
     const shipment = await requireRiderShipment(shipmentId, riderId);
+    // A prepaid shipment re-priced upward at pickup can't be handed over until the difference is in.
+    const balance = payableAmount(shipment) - (shipment.amountPaid ?? 0);
+    if (isPrepaid(shipment.paymentMethod) && balance > 0) {
+      throw new AppError(
+        400,
+        `₦${(balance / 100).toLocaleString('en-NG')} is still unpaid. Ask the sender to pay to their account number, or collect cash and record it.`,
+        'BALANCE_DUE',
+      );
+    }
     if (shipment.tagCode !== input.tagCode)
       throw badRequest('Tag does not match this parcel', 'TAG_MISMATCH');
 
@@ -406,7 +424,6 @@ export const ShipmentsService = {
               receivedBy: input.receivedBy,
               at: new Date(),
             },
-            ...(shipment.paymentMethod === 'cash_on_delivery' && { paymentStatus: 'paid' }),
           },
         },
       },
@@ -421,17 +438,6 @@ export const ShipmentsService = {
         set: { $set: { 'dispatch.state': 'unassigned' } },
       }),
     );
-  },
-
-  async markPaid(shipmentId: string) {
-    const shipment = await ShipmentModel.findOneAndUpdate(
-      { _id: shipmentId, paymentStatus: 'unpaid' },
-      { paymentStatus: 'paid' },
-      { new: true },
-    ).populate(SHIPMENT_POPULATE);
-    if (!shipment) throw badRequest('Shipment is already paid or does not exist');
-    bus.emit('shipment.paid', { shipmentId });
-    return toShipmentDto(shipment);
   },
 
   async riderJobs(riderId: string) {

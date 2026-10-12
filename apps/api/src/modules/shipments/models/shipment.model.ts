@@ -62,6 +62,8 @@ export interface IShipment {
   serviceLevel: ServiceLevel;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  /** Sum of successful payments, kobo. Maintained by PaymentsService only. */
+  amountPaid: number;
   estimate: {
     lines: QuoteLine[];
     subtotal: number;
@@ -122,6 +124,7 @@ const shipmentSchema = new Schema<IShipment>(
     serviceLevel: { type: String, enum: SERVICE_LEVELS, required: true },
     paymentMethod: { type: String, enum: PAYMENT_METHODS, required: true },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: 'unpaid' },
+    amountPaid: { type: Number, default: 0 },
     estimate: {
       lines: [{ _id: false, code: String, label: String, amount: Number }],
       subtotal: Number,

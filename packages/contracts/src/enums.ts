@@ -4,7 +4,8 @@
  */
 
 export const SHIPMENT_STATUSES = [
-  'created', // booked, waiting for a rider
+  'awaiting_payment', // booked with online payment; dispatch starts once paid
+  'created', // booked (and paid, if paying online), waiting for a rider
   'assigned', // a rider accepted the job
   'en_route_to_pickup',
   'picked_up', // parcel scanned + tagged, price confirmed
@@ -40,17 +41,21 @@ export const SERVICE_LEVEL_META: Record<ServiceLevel, { label: string; hint: str
 };
 
 export const PAYMENT_METHODS = [
-  'card',
-  'transfer',
+  'online', // hosted gateway checkout: card, USSD or transfer, paid before dispatch
+  'transfer', // a dedicated account number to send money to, paid before dispatch
   'cash_on_pickup',
   'cash_on_delivery',
   'on_account',
 ] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+/** Methods that must be settled before a rider is dispatched. */
+export const PREPAID_METHODS: readonly PaymentMethod[] = ['online', 'transfer'];
+export const isPrepaid = (m: PaymentMethod) => PREPAID_METHODS.includes(m);
+
 /** What a walk-in/web customer may choose. `on_account` is only for business clients. */
 export const CUSTOMER_PAYMENT_METHODS = [
-  'card',
+  'online',
   'transfer',
   'cash_on_pickup',
   'cash_on_delivery',
@@ -60,8 +65,8 @@ export const CUSTOMER_PAYMENT_METHODS = [
 export const CLIENT_PAYMENT_METHODS = ['on_account', 'cash_on_pickup', 'cash_on_delivery'] as const;
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  card: 'Card',
-  transfer: 'Bank transfer',
+  online: 'Paid online',
+  transfer: 'Bank transfer to account',
   cash_on_pickup: 'Cash at pickup',
   cash_on_delivery: 'Cash on delivery',
   on_account: 'On account (invoiced)',
@@ -96,7 +101,17 @@ export const WEBHOOK_EVENTS = [
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
-export const PAYMENT_STATUSES = ['unpaid', 'paid', 'refunded'] as const;
+/**
+ * Derived from amount paid vs. amount owed. `partially_paid` happens when the
+ * rider raises the price at pickup; `overpaid` when it drops (refund due).
+ */
+export const PAYMENT_STATUSES = [
+  'unpaid',
+  'partially_paid',
+  'paid',
+  'overpaid',
+  'refunded',
+] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 /** company = on payroll, uses company fleet. partner = independent; we take a commission per trip. */

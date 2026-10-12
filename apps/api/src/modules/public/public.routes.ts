@@ -1,10 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { CreateShipmentSchema, QuoteRequestSchema } from '@estene/contracts/shipment';
+import { notFound } from '../../lib/errors';
 import { parse, send } from '../../lib/response';
-import { ShipmentsService } from '../shipments/shipments.service';
+import { PaymentsService } from '../payments/payments.service';
 import { PricingService } from '../pricing/pricing.service';
+import { ShipmentModel } from '../shipments/models/shipment.model';
+import { ShipmentsService } from '../shipments/shipments.service';
 import { ZonesService } from '../zones/zones.service';
+
+const TrackingParams = z.object({ trackingNumber: z.string().trim().min(6).max(20) });
+const RefParams = z.object({ reference: z.string().trim().min(6).max(40) });
 
 /**
  * Unauthenticated endpoints for the public website. Each is rate limited
@@ -28,6 +34,7 @@ export async function publicRoutes(app: FastifyInstance) {
     },
   );
 
+  /** Books a shipment. Prepaid methods return what the browser needs to pay right away. */
   app.post(
     '/shipments',
     { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } },
@@ -38,15 +45,23 @@ export async function publicRoutes(app: FastifyInstance) {
         { source: 'web' },
       );
       const { lines, subtotal, total } = shipment.estimate;
+      const payment =
+        shipment.paymentMethod === 'online'
+          ? { checkout: await PaymentsService.startCheckout(shipment.id, 'booking') }
+          : shipment.paymentMethod === 'transfer'
+            ? { transfer: await PaymentsService.startTransfer(shipment.id, 'booking') }
+            : null;
       return send(
         reply,
         {
           id: shipment.id,
           trackingNumber: shipment.trackingNumber,
+          status: shipment.status,
           estimate: { lines, subtotal, total },
+          payment,
         },
         201,
-        'Booking confirmed',
+        'Booking saved',
       );
     },
   );
@@ -55,11 +70,55 @@ export async function publicRoutes(app: FastifyInstance) {
     '/track/:trackingNumber',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (req, reply) => {
-      const { trackingNumber } = parse(
-        z.object({ trackingNumber: z.string().trim().min(6).max(20) }),
-        req.params,
+      const { trackingNumber } = parse(TrackingParams, req.params);
+      const tracking = await ShipmentsService.track(trackingNumber);
+      const doc = await ShipmentModel.findOne({ trackingNumber: tracking.trackingNumber });
+      return send(reply, {
+        ...tracking,
+        payment: doc ? await PaymentsService.publicDue(doc) : undefined,
+      });
+    },
+  );
+
+  /** Pay what's owed from the tracking page — online checkout or an account number. */
+  app.post(
+    '/track/:trackingNumber/pay',
+    { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } },
+    async (req, reply) => {
+      const { trackingNumber } = parse(TrackingParams, req.params);
+      const { channel } = parse(
+        z.object({ channel: z.enum(['checkout', 'transfer']).default('checkout') }),
+        req.body ?? {},
       );
-      return send(reply, await ShipmentsService.track(trackingNumber));
+      const doc = await ShipmentModel.findOne(
+        { trackingNumber: trackingNumber.toUpperCase() },
+        '_id',
+      );
+      if (!doc) throw notFound('We could not find a parcel with that tracking number');
+      return send(
+        reply,
+        channel === 'checkout'
+          ? { checkout: await PaymentsService.startCheckout(doc.id) }
+          : { transfer: await PaymentsService.startTransfer(doc.id) },
+      );
+    },
+  );
+
+  /** Called by the site when the shopper returns from checkout. Re-checks with the gateway. */
+  app.post(
+    '/payments/:reference/verify',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const { reference } = parse(RefParams, req.params);
+      const payment = await PaymentsService.verify(reference);
+      const shipment = await ShipmentModel.findById(payment?.shipment, 'trackingNumber status');
+      return send(reply, {
+        reference,
+        status: payment?.status ?? 'pending',
+        amount: payment?.amount,
+        trackingNumber: shipment?.trackingNumber,
+        shipmentStatus: shipment?.status,
+      });
     },
   );
 }

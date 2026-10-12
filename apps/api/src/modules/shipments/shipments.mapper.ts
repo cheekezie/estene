@@ -54,6 +54,8 @@ export function toShipmentDto(o: IShipment): ShipmentDto {
     serviceLevel: o.serviceLevel,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
+    amountPaid: o.amountPaid ?? 0,
+    balanceDue: payableAmount(o) - (o.amountPaid ?? 0),
     estimate: { lines: o.estimate.lines, subtotal: o.estimate.subtotal, total: o.estimate.total },
     finalAmount: o.finalAmount,
     // Unset nested paths come back as {} on hydrated docs — check a required field, not the object.

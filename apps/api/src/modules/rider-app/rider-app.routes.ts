@@ -11,6 +11,8 @@ import { DispatchService } from '../dispatch/dispatch.service';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { RidersService } from '../riders/riders.service';
 import { RiderModel } from '../riders/models/rider.model';
+import { ShipmentModel } from '../shipments/models/shipment.model';
+import { PaymentsService } from '../payments/payments.service';
 import { PresenceService } from '../riders/presence.service';
 
 const IdParams = z.object({ id: ObjectIdSchema });
@@ -86,6 +88,20 @@ export async function riderAppRoutes(app: FastifyInstance) {
       req.body,
     );
     return send(reply, await ShipmentsService.advance(id, req.user.sub, status, note));
+  });
+
+  /** Sender couldn't pay the re-priced balance online — the rider takes it in cash before handing over. */
+  app.post('/jobs/:id/collect-balance', async (req, reply) => {
+    const { id } = parse(IdParams, req.params);
+    const shipment = await ShipmentModel.findOne({ _id: id, rider: req.user.sub }, '_id');
+    if (!shipment) throw forbidden('This job is not assigned to you');
+    const payment = await PaymentsService.recordCash(id, req.user.sub);
+    return send(
+      reply,
+      { collected: payment?.amount ?? 0 },
+      200,
+      payment ? 'Cash recorded' : 'Nothing outstanding',
+    );
   });
 
   app.post('/jobs/:id/deliver', async (req, reply) => {

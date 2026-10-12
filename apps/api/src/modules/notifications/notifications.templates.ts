@@ -4,8 +4,19 @@ import type { ShipmentStatus } from '@estene/contracts/enums';
 
 const TRACK_URL = 'estene.ng/track';
 
+type Account = { accountNumber: string; bankName: string; accountName: string };
+
 /** SMS copy. Kept under 160 chars where possible — every extra segment costs money. */
 export const templates = {
+  payOnline: (tn: string) =>
+    `Estene: complete payment for ${tn} to dispatch a rider. Pay online: ${TRACK_URL}/${tn}`,
+
+  payByTransfer: (tn: string, amount: number, a: Account) =>
+    `Estene: send exactly ${formatNaira(amount)} to ${a.accountNumber} (${a.bankName}, ${a.accountName}) for ${tn}. We dispatch a rider once it lands.`,
+
+  balanceDue: (tn: string, amount: number, a: Account) =>
+    `Estene: ${tn} costs ${formatNaira(amount)} more after the rider checked it. Send it to ${a.accountNumber} (${a.bankName}) or pay at ${TRACK_URL}/${tn} before delivery.`,
+
   senderStatus: (tn: string, status: ShipmentStatus) =>
     `Estene: ${tn} — ${SHIPMENT_STATUS_META[status].label}. ${SHIPMENT_STATUS_META[status].description} Track: ${TRACK_URL}/${tn}`,
 

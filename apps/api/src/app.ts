@@ -12,6 +12,9 @@ import { integrationRoutes } from './modules/integration/integration.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { financeRoutes } from './modules/finance/finance.routes';
 import { shipmentsRoutes } from './modules/shipments/shipments.routes';
+import { paymentsRoutes } from './modules/payments/payments.routes';
+import { payoutsRoutes } from './modules/payouts/payouts.routes';
+import { simulatorRoutes } from './modules/payments/simulator.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
 import { publicRoutes } from './modules/public/public.routes';
 import { riderAppRoutes } from './modules/rider-app/rider-app.routes';
@@ -100,6 +103,8 @@ export async function buildApp() {
   //   everything else — admin back office
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(publicRoutes, { prefix: '/api/public' });
+  if (env.PAYMENTS_PROVIDER === 'simulator')
+    await app.register(simulatorRoutes, { prefix: '/api/public' });
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
   await app.register(integrationRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
@@ -111,6 +116,8 @@ export async function buildApp() {
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(adminsRoutes, { prefix: '/api/staff' });
   await app.register(clientsRoutes, { prefix: '/api/clients' });
+  await app.register(paymentsRoutes, { prefix: '/api/payments' });
+  await app.register(payoutsRoutes, { prefix: '/api/payouts' });
 
   return app;
 }

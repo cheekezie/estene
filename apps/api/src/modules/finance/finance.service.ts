@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { LEDGER_ENTRY_TYPES, type LedgerEntryType } from '@estene/contracts/enums';
 import { ObjectIdSchema, PaginationQuerySchema } from '@estene/contracts/common';
 import { randomToken } from '../../lib/crypto';
-import { badRequest } from '../../lib/errors';
 import { paginate } from '../../lib/response';
+import { PaymentModel } from '../payments/models/payment.model';
+import { PayoutModel } from '../payouts/models/payout.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { payableAmount } from '../shipments/shipments.mapper';
 import { PricingService } from '../pricing/pricing.service';
@@ -52,21 +53,38 @@ const dateRange = (from?: Date, to?: Date) =>
   from || to ? { createdAt: { ...(from && { $gte: from }), ...(to && { $lte: to }) } } : {};
 
 export const FinanceService = {
-  /** Staff marked a non-cash shipment paid (transfer received, client invoice settled). */
-  async recordPaymentReceived(shipmentId: string) {
-    const shipment = await ShipmentModel.findById(shipmentId).lean();
-    if (!shipment) return;
-    await post([
+  /**
+   * Posts a successful payment. Cash in a rider's hand also becomes a debt the
+   * rider owes us until it's remitted. Keyed per payment, so a booking and a
+   * later balance top-up on the same shipment are both recorded.
+   */
+  async recordPayment(paymentId: string) {
+    const payment = await PaymentModel.findById(paymentId).lean();
+    if (!payment || payment.status !== 'success') return;
+    const entries: NewEntry[] = [
       {
         type: 'payment_received',
-        amount: payableAmount(shipment),
+        amount: payment.amount,
         account: 'customer',
-        shipment: shipment._id,
-        client: shipment.client ?? undefined,
-        reference: shipment.paymentMethod,
-        idempotencyKey: `${shipmentId}:payment_received`,
+        shipment: payment.shipment,
+        client: payment.client ?? undefined,
+        reference: payment.reference,
+        note: payment.channel,
+        idempotencyKey: `payment:${paymentId}:received`,
       },
-    ]);
+    ];
+    if (payment.channel === 'cash' && payment.collectedBy) {
+      entries.push({
+        type: 'cash_collected',
+        amount: payment.amount,
+        account: 'rider',
+        rider: payment.collectedBy,
+        shipment: payment.shipment,
+        reference: payment.reference,
+        idempotencyKey: `payment:${paymentId}:cash`,
+      });
+    }
+    await post(entries);
   },
 
   /** Delivered on-account charges minus payments received for that client. */
@@ -82,31 +100,6 @@ export const FinanceService = {
     ]);
     const t = Object.fromEntries(rows.map((r) => [r._id, r.total]));
     return (t.shipment_charge ?? 0) - (t.payment_received ?? 0);
-  },
-
-  /** Rider took cash from the customer — the rider now owes it to us. */
-  async recordCashCollected(shipmentId: string) {
-    const shipment = await ShipmentModel.findById(shipmentId).lean();
-    if (!shipment?.rider) return;
-    const amount = payableAmount(shipment);
-    await post([
-      {
-        type: 'cash_collected',
-        amount,
-        account: 'rider',
-        rider: shipment.rider,
-        shipment: shipment._id,
-        idempotencyKey: `${shipmentId}:cash_collected`,
-      },
-      {
-        type: 'payment_received',
-        amount,
-        account: 'customer',
-        shipment: shipment._id,
-        idempotencyKey: `${shipmentId}:payment_received`,
-        reference: 'cash',
-      },
-    ]);
   },
 
   /**
@@ -167,20 +160,20 @@ export const FinanceService = {
     await post(entries);
   },
 
-  async recordPayout(input: z.infer<typeof RiderMoneySchema>, adminId: string) {
-    const rider = await RiderModel.findById(input.riderId, 'type').lean();
-    if (!rider) throw badRequest('Rider not found');
-    if (rider.type !== 'partner') throw badRequest('Company riders are paid through payroll');
+  /** Money out to a partner rider — posted only once the payout has actually succeeded. */
+  async recordPayout(payoutId: string) {
+    const payout = await PayoutModel.findById(payoutId).lean();
+    if (!payout || payout.status !== 'success') return;
     await post([
       {
         type: 'payout',
-        amount: input.amount,
+        amount: payout.amount,
         account: 'rider',
-        rider: rider._id,
-        reference: input.reference,
-        note: input.note,
-        createdBy: new Types.ObjectId(adminId),
-        idempotencyKey: `payout:${randomToken(12)}`,
+        rider: payout.rider,
+        reference: payout.reference,
+        note: payout.method === 'manual' ? 'Recorded manually' : 'Bank transfer',
+        createdBy: payout.initiatedBy,
+        idempotencyKey: `payout:${payoutId}`,
       },
     ]);
   },

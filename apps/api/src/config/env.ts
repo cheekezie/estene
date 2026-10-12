@@ -22,11 +22,30 @@ const envSchema = z.object({
   SEED_ADMIN_PASSWORD: z.string().optional(),
   /** Public website — used for tracking links in SMS and integration payloads. */
   PUBLIC_SITE_URL: z.string().default('http://localhost:3100'),
+  /** Public API origin — used to build links the browser follows (simulator pages). */
+  API_PUBLIC_URL: z.string().default('http://localhost:4000'),
+
+  // ── Payments ────────────────────────────────────────────────────────────
+  /**
+   * Only the development simulator exists today; the SaySwitch gateway plugs
+   * in behind the same PaymentGateway interface (modules/payments/providers).
+   */
+  PAYMENTS_PROVIDER: z.enum(['simulator']).default('simulator'),
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().default('Estene'),
 });
 
-const parsed = envSchema.safeParse(process.env);
+const parsed = envSchema
+  .superRefine((e, ctx) => {
+    if (e.NODE_ENV === 'production' && e.PAYMENTS_PROVIDER === 'simulator') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYMENTS_PROVIDER'],
+        message: 'The payment simulator cannot run in production',
+      });
+    }
+  })
+  .safeParse(process.env);
 if (!parsed.success) {
   console.error(`Invalid environment variables:\n${z.prettifyError(parsed.error)}`);
   process.exit(1);
