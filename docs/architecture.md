@@ -15,11 +15,12 @@
 
 Every client talks to one API. Routes are split by audience:
 
-| Prefix | Caller | Auth |
-| --- | --- | --- |
-| `/api/public/*` | Website | None, rate limited per IP |
-| `/api/rider/*` | Rider app | JWT, `actor: rider` |
-| everything else | Admin console | JWT, `actor: admin` plus role guards |
+| Prefix          | Caller                | Auth                                               |
+| --------------- | --------------------- | -------------------------------------------------- |
+| `/api/public/*` | Website               | None, rate limited per IP                          |
+| `/api/rider/*`  | Rider app             | JWT, `actor: rider`                                |
+| `/api/v1/*`     | Business integrations | API key (`Bearer est_live_…`), per-key rate limits |
+| everything else | Admin console         | JWT, `actor: admin` plus role guards               |
 
 ## What changed from the eduspace pattern
 
@@ -52,6 +53,7 @@ envelope and `AppError`. These are the deliberate improvements:
 ## Core flows
 
 ### Booking and pricing
+
 Customers pick an **area**, and areas belong to a **zone**. The route fare is the zone's intra-zone fare
 for same-zone trips, otherwise a zone↔zone `RouteRate`, otherwise the default route fare. On top of that:
 
@@ -64,6 +66,7 @@ Totals round up to the configured naira step. The result is stored on the order 
 with the pricing version.
 
 ### Dispatch (`modules/dispatch`)
+
 1. `order.created` → a `dispatch-order` job.
 2. Candidates are riders who are **online** and **physically within** the pickup zone's radius plus 3 km
    (Redis `GEOSEARCH`). Riders below the job cap and not already declined stay in.
@@ -74,6 +77,7 @@ with the pricing version.
    for manual assignment. The dashboard highlights these orders.
 
 ### Pickup and delivery (rider app endpoints)
+
 - **Pickup:** the rider scans a pre-printed QR tag (it must exist and be `available`) and confirms size
   and weight. The price is recomputed. If it differs, a reason is required, `finalAmount` is set, and
   the sender is SMSed.
@@ -81,8 +85,60 @@ with the pricing version.
   **PIN** (5 attempts, then photo only) or a **photo**. The PIN reaches the recipient by SMS at
   `out_for_delivery`.
 
+### Order channels and business clients
+
+Each order records its `source`:
+
+| Source  | Who books it                    | Actor on the timeline |
+| ------- | ------------------------------- | --------------------- |
+| `web`   | Public site                     | `customer`            |
+| `admin` | Phone booking keyed in by staff | `admin`               |
+| `api`   | Business integration            | `client`              |
+
+An order can belong to a business **client** (`clients` module). Admin can book on a
+client's behalf, and API orders always belong to the calling client. Clients can be billed
+`on_account`: delivery posts an `order_charge` tagged with the client, and marking it paid
+posts `payment_received`. The difference is the client's outstanding balance.
+
+**API keys:**
+
+- Format is `est_live_…`. Only the SHA-256 is stored.
+- Lookups are cached in Redis for 60 s. Revoking a key or suspending the client evicts the
+  cache, so access stops immediately.
+
+**Integration API:**
+
+- `/api/v1`, documented for integrators in [`integrations.md`](integrations.md).
+- Every query is scoped to the calling client.
+- Creates are idempotent on `(client, externalReference)` through a unique index.
+- The response shape is `IntegrationOrderDto`. Changing it is a breaking change.
+
+### Webhooks (`modules/webhooks`)
+
+Listeners on `order.created`, `order.status_changed` and `order.price_adjusted` enqueue a
+`WebhookDelivery` row for subscribed clients. The row stores the exact JSON body. A
+BullMQ worker sends it with:
+
+- `Estene-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`
+- a 10 s timeout
+- no redirect following
+- 8 retries with exponential backoff
+
+Each delivery has one queue job (`jobId = deliveryId`), so a resend from the admin console
+replaces pending retries instead of racing them. A resend goes to the client's current URL.
+The signing secret is AES-GCM encrypted, because we must read it back to sign.
+
+In production, URLs must be https and must not resolve to private, loopback or
+link-local addresses (SSRF). That is checked at send time, after DNS resolution.
+Deliveries expire after 30 days because they contain customer contact details.
+
+`order.created` fires exactly once per order. Putting an order back into dispatch emits
+`dispatch.requested` instead, so clients and SMS never see a duplicate "created".
+
 ### Finance
+
 On `delivered`, `order_charge` is posted. Then:
+
 - **Company rider:** the full fare is `platform_revenue`.
 - **Partner rider:** the commission (per rider, or the platform default) is `platform_revenue` and the
   remainder is `rider_earning`.
@@ -91,6 +147,7 @@ Cash methods post `cash_collected` against the rider. Ops record `cash_remitted`
 Rider balance = earnings − payouts − cash held.
 
 ## Scaling path
+
 - The API is stateless, so it scales horizontally behind a load balancer. Rate limits and presence
   already live in Redis.
 - Workers (`startWorker`) can move to a separate `worker` entrypoint without code changes.
@@ -99,6 +156,7 @@ Rider balance = earnings − payouts − cash held.
 - MongoDB: run as a replica set in production (also enables multi-document transactions if needed).
 
 ## Roadmap
+
 1. **Rider app** (`apps/rider`, Expo):
    - login, online toggle with background location heartbeat, offer card with countdown
    - QR scan for pickup and delivery, PIN entry, photo capture
@@ -107,4 +165,7 @@ Rider balance = earnings − payouts − cash held.
 4. **Customer accounts:** phone OTP sign-in, order history, saved addresses.
 5. **Live ops map:** Socket.IO and map tiles in the admin, plus a rider live view.
 6. **Notifications:** WhatsApp and email channels, and push for riders.
-7. **Audit log** for admin actions; printable QR tag sheets; ESLint config.
+7. **Client self-service portal:** keys, webhook settings, delivery log, invoices and statements;
+   a sandbox (`est_test_` keys against seeded data); IP-pinned webhook sends to close the
+   DNS-rebinding gap.
+8. **Audit log** for admin actions; printable QR tag sheets; ESLint config.
