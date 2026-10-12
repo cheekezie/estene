@@ -31,45 +31,6 @@
   animation: trail-draw linear infinite both;
 }
 
-@keyframes pin-pulse {
-  0%,
-  100% {
-    transform: scale(0.6);
-    opacity: 0.5;
-  }
-  50% {
-    transform: scale(1.4);
-    opacity: 0;
-  }
-}
-.pin-pulse {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: pin-pulse 2.4s ease-out infinite;
-}
-
-/* Three cards share a 12s loop, each on stage for ~4s. */
-@keyframes notice-cycle {
-  0% {
-    opacity: 0;
-    transform: translateY(16px) scale(0.96);
-  }
-  4%,
-  28% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  33%,
-  100% {
-    opacity: 0;
-    transform: translateY(-12px) scale(0.98);
-  }
-}
-.hero-notice {
-  opacity: 0;
-  animation: notice-cycle 12s ease-in-out infinite;
-}
-
 /* Four words + the first repeated, so the end frame equals the start frame. */
 @keyframes word-roll {
   from {
@@ -108,24 +69,24 @@
   animation: ticker 40s linear infinite;
 }
 
+/* The parked rider only appears when motion is reduced. */
+.rider-static {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .route-trail {
     animation: none;
-    stroke-dashoffset: 0;
+    stroke-dashoffset: 0.5;
   }
-  .pin-pulse,
   .ticker,
   .word-roller {
     animation: none;
   }
-  .hero-notice {
-    animation: none;
-    opacity: 0;
-  }
-  .hero-notice:last-child {
-    opacity: 1;
-  }
-  .rider-marker {
+  .rider-moving {
     display: none;
+  }
+  .rider-static {
+    display: inline;
   }
 }
