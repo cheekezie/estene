@@ -1,0 +1,29 @@
+{
+  "name": "@estene/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Single source of truth for domain enums, the order state machine, pricing math and API request schemas. Consumed by the API and every client.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    "./enums": "./src/enums.ts",
+    "./order-status": "./src/order-status.ts",
+    "./pricing": "./src/pricing.ts",
+    "./money": "./src/money.ts",
+    "./common": "./src/common.ts",
+    "./auth": "./src/auth.ts",
+    "./zone": "./src/zone.ts",
+    "./order": "./src/order.ts",
+    "./rider": "./src/rider.ts"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@estene/config": "workspace:*",
+    "vitest": "^3.2.4"
+  }
+}

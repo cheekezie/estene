@@ -1,0 +1,42 @@
+{
+  "name": "estene",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write \"**/*.{ts,tsx,json,css,md}\" --ignore-path .gitignore",
+    "prepare": "husky",
+    "dev:api": "turbo dev --filter @estene/api",
+    "dev:admin": "turbo dev --filter @estene/admin",
+    "dev:web": "turbo dev --filter @estene/web",
+    "build:api": "turbo build --filter @estene/api",
+    "build:admin": "turbo build --filter @estene/admin",
+    "build:web": "turbo build --filter @estene/web",
+    "preview:admin": "pnpm --filter @estene/admin preview",
+    "start:api": "pnpm --filter @estene/api start",
+    "start:web": "pnpm --filter @estene/web start",
+    "seed": "pnpm --filter @estene/api seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver", "msgpackr-extract"]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.0",
+    "prettier": "^3.6.0",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.2"
+  }
+}

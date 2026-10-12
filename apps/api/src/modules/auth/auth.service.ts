@@ -1,0 +1,103 @@
+import bcrypt from 'bcryptjs';
+import type { FastifyInstance } from 'fastify';
+import type { ActorType, AdminRole } from '@estene/contracts/enums';
+import type { AdminLoginInput, AdminProfile, RiderLoginInput } from '@estene/contracts/auth';
+import { env } from '../../config/env';
+import { randomToken, sha256 } from '../../lib/crypto';
+import { unauthorized } from '../../lib/errors';
+import { AdminModel, type IAdmin } from '../admins/models/admin.model';
+import { RiderModel } from '../riders/models/rider.model';
+import { SessionModel } from './models/session.model';
+
+type ClientMeta = { ip?: string; userAgent?: string };
+type Subject = { id: string; actor: ActorType; role?: AdminRole };
+
+// Same cost whether or not the account exists, so login timing doesn't reveal valid emails.
+const DUMMY_HASH = bcrypt.hashSync('timing-equaliser', 10);
+
+export const toAdminProfile = (a: IAdmin): AdminProfile => ({
+  id: a._id.toString(),
+  name: a.name,
+  email: a.email,
+  role: a.role,
+});
+
+export function createAuthService(app: FastifyInstance) {
+  async function issueTokens(subject: Subject, meta: ClientMeta, family = randomToken(12)) {
+    const accessToken = app.jwt.sign({ sub: subject.id, actor: subject.actor, role: subject.role });
+    const refreshToken = randomToken();
+    await SessionModel.create({
+      actor: subject.actor,
+      subject: subject.id,
+      tokenHash: sha256(refreshToken),
+      family,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      expiresAt: new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 86_400_000),
+    });
+    return { accessToken, refreshToken };
+  }
+
+  return {
+    async adminLogin(input: AdminLoginInput, meta: ClientMeta) {
+      const admin = await AdminModel.findOne({ email: input.email, isActive: true }).select('+passwordHash');
+      const valid = await bcrypt.compare(input.password, admin?.passwordHash ?? DUMMY_HASH);
+      if (!admin || !valid) throw unauthorized('Incorrect email or password');
+
+      admin.lastLoginAt = new Date();
+      await admin.save();
+      const tokens = await issueTokens({ id: admin.id, actor: 'admin', role: admin.role }, meta);
+      return { ...tokens, user: toAdminProfile(admin) };
+    },
+
+    async riderLogin(input: RiderLoginInput, meta: ClientMeta) {
+      const rider = await RiderModel.findOne({ phone: input.phone }).select('+passwordHash');
+      const valid = await bcrypt.compare(input.password, rider?.passwordHash ?? DUMMY_HASH);
+      if (!rider || !valid) throw unauthorized('Incorrect phone number or password');
+      if (rider.status !== 'active') throw unauthorized('Your account is not active. Contact operations.');
+
+      const tokens = await issueTokens({ id: rider.id, actor: 'rider' }, meta);
+      return { ...tokens, user: { id: rider.id, name: `${rider.firstName} ${rider.lastName}`, code: rider.code } };
+    },
+
+    /** Rotates the refresh token. Reuse of a rotated token revokes the whole family. */
+    async refresh(refreshToken: string, meta: ClientMeta) {
+      const session = await SessionModel.findOne({ tokenHash: sha256(refreshToken) });
+      if (!session || session.expiresAt < new Date()) throw unauthorized('Session expired');
+
+      if (session.revokedAt) {
+        await SessionModel.updateMany({ family: session.family }, { revokedAt: new Date() });
+        throw unauthorized('Session expired');
+      }
+
+      let role: AdminRole | undefined;
+      if (session.actor === 'admin') {
+        const admin = await AdminModel.findOne({ _id: session.subject, isActive: true });
+        if (!admin) throw unauthorized('Session expired');
+        role = admin.role;
+      }
+
+      const tokens = await issueTokens(
+        { id: session.subject.toString(), actor: session.actor, role },
+        meta,
+        session.family,
+      );
+      session.revokedAt = new Date();
+      session.replacedBy = sha256(tokens.refreshToken);
+      await session.save();
+      return tokens;
+    },
+
+    async logout(refreshToken: string | undefined) {
+      if (!refreshToken) return;
+      const session = await SessionModel.findOne({ tokenHash: sha256(refreshToken) });
+      if (session) await SessionModel.updateMany({ family: session.family }, { revokedAt: new Date() });
+    },
+
+    async adminProfile(adminId: string) {
+      const admin = await AdminModel.findById(adminId);
+      if (!admin || !admin.isActive) throw unauthorized();
+      return toAdminProfile(admin);
+    },
+  };
+}
