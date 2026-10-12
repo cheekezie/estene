@@ -1,10 +1,20 @@
 import { z } from 'zod';
 import { CreateShipmentSchema, type CreateShipmentInput } from '@estene/contracts/shipment';
-import type { ParcelSize, PaymentMethod, ServiceLevel } from '@estene/contracts/enums';
+import type {
+  DeliveryMode,
+  OriginMode,
+  ParcelSize,
+  PaymentMethod,
+  ServiceLevel,
+} from '@estene/contracts/enums';
 import { nairaToKobo } from '@estene/contracts/money';
 
 /** Flat, string-friendly form state. Converted to the API contract only on submit. */
 export type BookingDraft = {
+  originMode: OriginMode;
+  originOfficeId: string;
+  deliveryMode: DeliveryMode;
+  destinationOfficeId: string;
   pickupSlot: string; // "<zoneId>|<area>"
   dropoffSlot: string;
   size: ParcelSize;
@@ -27,6 +37,10 @@ export type BookingDraft = {
 };
 
 export const EMPTY_DRAFT: BookingDraft = {
+  originMode: 'pickup',
+  originOfficeId: '',
+  deliveryMode: 'door',
+  destinationOfficeId: '',
   pickupSlot: '',
   dropoffSlot: '',
   size: 'small',
@@ -58,22 +72,27 @@ const opt = (v: string) => v.trim() || undefined;
 export function toShipmentInput(d: BookingDraft): unknown {
   const pickup = splitSlot(d.pickupSlot);
   const dropoff = splitSlot(d.dropoffSlot);
+  // An office replaces the address at that end — send only the contact.
+  const atDoor = (slot: { zoneId: string; area: string }, address: string, landmark: string) => ({
+    zoneId: opt(slot.zoneId),
+    area: opt(slot.area),
+    address: opt(address),
+    landmark: opt(landmark),
+  });
   return {
+    originMode: d.originMode,
+    originOfficeId: d.originMode === 'dropoff' ? opt(d.originOfficeId) : undefined,
+    deliveryMode: d.deliveryMode,
+    destinationOfficeId: d.deliveryMode === 'collection' ? opt(d.destinationOfficeId) : undefined,
     pickup: {
       contactName: d.senderName,
       phone: d.senderPhone,
-      zoneId: pickup.zoneId,
-      area: pickup.area,
-      address: d.pickupAddress,
-      landmark: opt(d.pickupLandmark),
+      ...(d.originMode === 'pickup' && atDoor(pickup, d.pickupAddress, d.pickupLandmark)),
     },
     dropoff: {
       contactName: d.recipientName,
       phone: d.recipientPhone,
-      zoneId: dropoff.zoneId,
-      area: dropoff.area,
-      address: d.dropoffAddress,
-      landmark: opt(d.dropoffLandmark),
+      ...(d.deliveryMode === 'door' && atDoor(dropoff, d.dropoffAddress, d.dropoffLandmark)),
     },
     parcel: {
       size: d.size,
@@ -91,6 +110,8 @@ export function toShipmentInput(d: BookingDraft): unknown {
 
 /** Maps contract error paths back onto the draft field the user typed into. */
 const PATH_TO_FIELD: Record<string, keyof BookingDraft> = {
+  originOfficeId: 'originOfficeId',
+  destinationOfficeId: 'destinationOfficeId',
   'pickup.zoneId': 'pickupSlot',
   'pickup.area': 'pickupSlot',
   'dropoff.zoneId': 'dropoffSlot',
@@ -144,7 +165,15 @@ export function validate(
 }
 
 export const STEP_FIELDS: (keyof BookingDraft)[][] = [
-  ['pickupSlot', 'dropoffSlot', 'weightKg', 'description', 'declaredValueNaira'],
+  [
+    'originOfficeId',
+    'destinationOfficeId',
+    'pickupSlot',
+    'dropoffSlot',
+    'weightKg',
+    'description',
+    'declaredValueNaira',
+  ],
   [
     'senderName',
     'senderPhone',

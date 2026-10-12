@@ -35,6 +35,7 @@ import {
 /** Every money field is edited in naira and stored in kobo. */
 type FormValues = {
   defaultRouteFare: string;
+  interstateFare: string;
   sizeFees: Record<ParcelSize, string>;
   includedKg: string;
   perKgFee: string;
@@ -52,6 +53,7 @@ const mapRecord = <K extends string, A, B>(r: Record<K, A>, fn: (v: A) => B) =>
 
 const toForm = (s: PlatformSettings): FormValues => ({
   defaultRouteFare: String(koboToNaira(s.defaultRouteFare)),
+  interstateFare: String(koboToNaira(s.interstateFare ?? 450_000)),
   sizeFees: mapRecord(s.sizeFees, (v) => String(koboToNaira(v))),
   includedKg: String(s.includedKg),
   perKgFee: String(koboToNaira(s.perKgFee)),
@@ -66,6 +68,7 @@ const toForm = (s: PlatformSettings): FormValues => ({
 
 const fromForm = (f: FormValues): Omit<PlatformSettings, 'version'> => ({
   defaultRouteFare: nairaToKobo(Number(f.defaultRouteFare)),
+  interstateFare: nairaToKobo(Number(f.interstateFare)),
   sizeFees: mapRecord(f.sizeFees, (v) => nairaToKobo(Number(v))),
   includedKg: Number(f.includedKg),
   perKgFee: nairaToKobo(Number(f.perKgFee)),
@@ -129,6 +132,12 @@ function PricingForm({ settings }: { settings: PlatformSettings }) {
                 hint="Used between zones with no specific route fare."
               >
                 {money('defaultRouteFare')}
+              </Field>
+              <Field
+                label="Default interstate fare (₦)"
+                hint="Between states with no specific route fare, e.g. Abuja ↔ Lagos."
+              >
+                {money('interstateFare')}
               </Field>
               <Field label="Round prices up to nearest (₦)">{money('roundToNaira')}</Field>
             </CardContent>

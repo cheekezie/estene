@@ -43,6 +43,13 @@ const router = createBrowserRouter([
           { path: 'riders', ...page(() => import('@/features/riders/RidersPage')) },
           { path: 'riders/:id', ...page(() => import('@/features/riders/RiderDetailPage')) },
           { path: 'zones', ...page(() => import('@/features/zones/ZonesPage')) },
+          { path: 'offices', ...page(() => import('@/features/offices/OfficesPage')) },
+          { path: 'office', ...page(() => import('@/features/office/OfficeCounterPage')) },
+          { path: 'manifests', ...page(() => import('@/features/manifests/ManifestsPage')) },
+          {
+            path: 'manifests/:id',
+            ...page(() => import('@/features/manifests/ManifestDetailPage')),
+          },
           { path: 'tags', ...page(() => import('@/features/tags/TagsPage')) },
           { path: 'pricing', ...page(() => import('@/features/pricing/PricingPage')) },
           { path: 'finance', ...page(() => import('@/features/finance/FinancePage')) },

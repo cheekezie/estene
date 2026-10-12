@@ -33,6 +33,8 @@ import { PageHeader } from '@/shared/components/PageHeader';
 import { useClientOptions } from '../clients/clients.queries';
 import { useZones } from '../zones/zones.queries';
 import { AreaSelect } from './components/AreaSelect';
+import { officeOptions, useOffices } from '../offices/offices.queries';
+import type { OfficeDto } from '@estene/contracts/office';
 
 /** The booking response carries payment details for prepaid methods. */
 type BookedShipment = ShipmentDto & {
@@ -66,6 +68,7 @@ export default function NewShipmentPage() {
   const [params] = useSearchParams();
   const presetClient = params.get('clientId') ?? undefined;
   const zones = useZones();
+  const offices = useOffices();
   const clients = useClientOptions();
 
   const form: Form = useForm<FormIn, unknown, FormOut>({
@@ -73,6 +76,8 @@ export default function NewShipmentPage() {
     defaultValues: {
       clientId: presetClient,
       serviceLevel: 'standard',
+      originMode: 'pickup',
+      deliveryMode: 'door',
       paymentMethod: presetClient ? 'on_account' : 'cash_on_pickup',
       parcel: { size: 'small', weightKg: 1, fragile: false },
     },
@@ -85,6 +90,16 @@ export default function NewShipmentPage() {
     formState: { errors },
   } = form;
   const clientId = useWatch({ control, name: 'clientId' });
+  const [originMode, originOfficeId, deliveryMode, destinationOfficeId] = useWatch({
+    control,
+    name: ['originMode', 'originOfficeId', 'deliveryMode', 'destinationOfficeId'],
+  });
+  const originOffice =
+    originMode === 'dropoff' ? offices.data?.find((o) => o.id === originOfficeId) : undefined;
+  const destinationOffice =
+    deliveryMode === 'collection'
+      ? offices.data?.find((o) => o.id === destinationOfficeId)
+      : undefined;
   const paymentMethod = useWatch({ control, name: 'paymentMethod' });
   const paymentChoices = PAYMENT_OPTIONS[clientId ? 'client' : 'individual'];
 
@@ -189,18 +204,25 @@ export default function NewShipmentPage() {
             </CardContent>
           </Card>
 
+          <TravelSection form={form} offices={offices.data ?? []} />
           <StopSection
             form={form}
             prefix="pickup"
-            title="Pickup (sender)"
+            title={originOffice ? `Sender — drops off at ${originOffice.name}` : 'Pickup (sender)'}
             zones={zones.data ?? []}
+            office={originOffice}
             lookup
           />
           <StopSection
             form={form}
             prefix="dropoff"
-            title="Drop-off (recipient)"
+            title={
+              destinationOffice
+                ? `Recipient — collects at ${destinationOffice.name}`
+                : 'Drop-off (recipient)'
+            }
             zones={zones.data ?? []}
+            office={destinationOffice}
           />
 
           <Card>
@@ -312,12 +334,15 @@ function StopSection({
   title,
   zones,
   lookup,
+  office,
 }: {
   form: Form;
   prefix: 'pickup' | 'dropoff';
   title: string;
   zones: ZoneDto[];
   lookup?: boolean;
+  /** When the parcel is dropped off / collected at an office, the office replaces the address. */
+  office?: OfficeDto;
 }) {
   const {
     register,
@@ -381,35 +406,49 @@ function StopSection({
         <Field label="Name" error={e?.contactName?.message}>
           <Input {...register(`${prefix}.contactName`)} />
         </Field>
-        <Field
-          label="Area"
-          error={e?.zoneId?.message || e?.area?.message ? 'Choose an area' : undefined}
-        >
-          <AreaSelect
-            zones={zones}
-            zoneId={zoneId}
-            area={area}
-            onChange={(z, a) => {
-              setValue(`${prefix}.zoneId`, z, { shouldValidate: !!e });
-              setValue(`${prefix}.area`, a, { shouldValidate: !!e });
-            }}
-          />
-        </Field>
-        <Field label="Landmark (optional)">
-          <Input
-            {...register(`${prefix}.landmark`, { setValueAs: (v: string) => v || undefined })}
-          />
-        </Field>
-        <Field label="Address" className="sm:col-span-2" error={e?.address?.message}>
-          <Input {...register(`${prefix}.address`)} />
-        </Field>
+        {office ? (
+          <p className="bg-muted text-muted-foreground rounded-md px-3 py-2 text-sm sm:col-span-2">
+            {office.name} · {office.address}, {office.zone.city}
+          </p>
+        ) : (
+          <>
+            <Field
+              label="Area"
+              error={e?.zoneId?.message || e?.area?.message ? 'Choose an area' : undefined}
+            >
+              <AreaSelect
+                zones={zones}
+                zoneId={zoneId}
+                area={area}
+                onChange={(z, a) => {
+                  setValue(`${prefix}.zoneId`, z, { shouldValidate: !!e });
+                  setValue(`${prefix}.area`, a, { shouldValidate: !!e });
+                }}
+              />
+            </Field>
+            <Field label="Landmark (optional)">
+              <Input
+                {...register(`${prefix}.landmark`, { setValueAs: (v: string) => v || undefined })}
+              />
+            </Field>
+            <Field label="Address" className="sm:col-span-2" error={e?.address?.message}>
+              <Input {...register(`${prefix}.address`)} />
+            </Field>
+          </>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function LiveQuote({ control }: { control: Form['control'] }) {
-  const [pickupZoneId, dropoffZoneId, size, weightKg, serviceLevel, fragile, declaredValue] =
+  const offices = useOffices();
+  const [originMode, originOfficeId, deliveryMode, destinationOfficeId] = useWatch({
+    control,
+    name: ['originMode', 'originOfficeId', 'deliveryMode', 'destinationOfficeId'],
+  });
+  const officeZone = (id?: string) => offices.data?.find((o) => o.id === id)?.zone.id;
+  const [stopPickupZone, stopDropoffZone, size, weightKg, serviceLevel, fragile, declaredValue] =
     useWatch({
       control,
       name: [
@@ -422,6 +461,10 @@ function LiveQuote({ control }: { control: Form['control'] }) {
         'parcel.declaredValue',
       ],
     });
+  // Office drop-off/collection: price from the office's zone.
+  const pickupZoneId = originMode === 'dropoff' ? officeZone(originOfficeId) : stopPickupZone;
+  const dropoffZoneId =
+    deliveryMode === 'collection' ? officeZone(destinationOfficeId) : stopDropoffZone;
   const key = useDebounce(
     JSON.stringify({
       pickupZoneId,
@@ -524,5 +567,109 @@ function FormErrorSummary({ errors }: { errors: FieldErrors<FormIn> }) {
     <p className="bg-destructive-soft text-destructive rounded-md p-3 text-sm" role="alert">
       Check the {sections.join(', ')} details.
     </p>
+  );
+}
+
+/** How the parcel starts and ends its journey: rider or office at each end. */
+function TravelSection({ form, offices }: { form: Form; offices: OfficeDto[] }) {
+  const {
+    register,
+    setValue,
+    control,
+    formState: { errors },
+  } = form;
+  const [originMode, deliveryMode] = useWatch({ control, name: ['originMode', 'deliveryMode'] });
+  const opts = officeOptions(offices);
+  const Toggle = ({
+    name,
+    value,
+    title,
+    hint,
+  }: {
+    name: 'originMode' | 'deliveryMode';
+    value: string;
+    title: string;
+    hint: string;
+  }) => {
+    const on = (name === 'originMode' ? originMode : deliveryMode) === value;
+    return (
+      <button
+        type="button"
+        role="radio"
+        aria-checked={on}
+        onClick={() => setValue(name, value as never)}
+        className={cn(
+          'rounded-lg border p-3 text-left transition-colors',
+          on ? 'border-primary bg-primary-soft' : 'hover:bg-muted',
+        )}
+      >
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="text-muted-foreground block text-xs">{hint}</span>
+      </button>
+    );
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>How it travels</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-5 lg:grid-cols-2">
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-medium">From the sender</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            <Toggle
+              name="originMode"
+              value="pickup"
+              title="Rider picks up"
+              hint="From their address"
+            />
+            <Toggle
+              name="originMode"
+              value="dropoff"
+              title="Drops at office"
+              hint="Sender brings it in"
+            />
+          </div>
+          {originMode === 'dropoff' && (
+            <Select
+              placeholder="Choose office"
+              aria-label="Drop-off office"
+              options={opts}
+              {...register('originOfficeId', { setValueAs: (v: string) => v || undefined })}
+            />
+          )}
+          {errors.originOfficeId && (
+            <p className="text-destructive text-xs">{errors.originOfficeId.message}</p>
+          )}
+        </fieldset>
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-medium">To the recipient</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            <Toggle name="deliveryMode" value="door" title="Door delivery" hint="Rider delivers" />
+            <Toggle
+              name="deliveryMode"
+              value="collection"
+              title="Collects at office"
+              hint="With their PIN"
+            />
+          </div>
+          {deliveryMode === 'collection' && (
+            <Select
+              placeholder="Choose office"
+              aria-label="Collection office"
+              options={opts}
+              {...register('destinationOfficeId', { setValueAs: (v: string) => v || undefined })}
+            />
+          )}
+          {errors.destinationOfficeId && (
+            <p className="text-destructive text-xs">{errors.destinationOfficeId.message}</p>
+          )}
+        </fieldset>
+        <p className="text-muted-foreground text-xs lg:col-span-2">
+          Between states, parcels always travel office to office — we route it through the nearest
+          office automatically.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

@@ -15,12 +15,16 @@ type ShipRef = {
   tagCode?: string;
   status: ManifestDto['shipments'][number]['status'];
   dropoff: { area: string };
+  fulfilment?: { deliveryMode?: string };
 };
 
 const POPULATE = [
   { path: 'fromOffice', select: 'name code zone', populate: { path: 'zone', select: 'city' } },
   { path: 'toOffice', select: 'name code zone', populate: { path: 'zone', select: 'city' } },
-  { path: 'shipments.shipment', select: 'trackingNumber tagCode status dropoff.area' },
+  {
+    path: 'shipments.shipment',
+    select: 'trackingNumber tagCode status dropoff.area fulfilment.deliveryMode',
+  },
   { path: 'createdBy', select: 'name' },
 ];
 
@@ -39,7 +43,8 @@ function toDto(m: IManifest): ManifestDto {
       tagCode: s.tagCode,
       status: s.status,
       received: !!e.receivedAt,
-      destinationArea: s.dropoff?.area ?? '',
+      destinationArea:
+        s.fulfilment?.deliveryMode === 'collection' ? 'Collect at office' : (s.dropoff?.area ?? ''),
     };
   });
   return {
@@ -162,9 +167,10 @@ export const ManifestsService = {
     if (!m.shipments.length) throw badRequest('Add at least one parcel before departure');
     if (m.carrier.type === 'partner' && !m.carrier.waybillNumber)
       throw badRequest('Add the carrier’s waybill number before departure', 'WAYBILL_REQUIRED');
+    const from = await OfficeModel.findById(m.fromOffice, 'name').lean();
     for (const e of m.shipments) {
       await ShipmentsService.transition(e.shipment.toString(), 'in_transit', actor, {
-        note: `On manifest ${m.code}`,
+        note: `Left ${from?.name ?? 'the office'} on manifest ${m.code}`,
         set: { $set: { currentOffice: null } },
       });
     }
@@ -198,8 +204,9 @@ export const ManifestsService = {
   },
 
   async checkIn(m: IManifest, shipmentId: Types.ObjectId, actor: Actor) {
+    const to = await OfficeModel.findById(m.toOffice, 'name').lean();
     await ShipmentsService.transition(shipmentId.toString(), 'at_hub', actor, {
-      note: `Arrived on manifest ${m.code}`,
+      note: `Arrived at ${to?.name ?? 'the office'} on manifest ${m.code}`,
       set: { $set: { currentOffice: m.toOffice, manifest: null } },
     });
     const now = new Date();

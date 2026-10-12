@@ -140,6 +140,8 @@ async function acceptParcel(
   actor: Actor,
   input: ConfirmPickupInput,
   extraSet: Record<string, unknown> = {},
+  /** Where it was accepted, e.g. "Dropped off at Wuse Office" — shown on the timeline. */
+  where?: string,
 ) {
   const shipmentId = shipment.id as string;
   const config = await PricingService.getConfig();
@@ -172,7 +174,10 @@ async function acceptParcel(
 
   try {
     const updated = await transition(shipmentId, to, actor, {
-      note: priceChanged ? `Price adjusted: ${input.adjustmentReason}` : undefined,
+      note:
+        [where, priceChanged && `Price adjusted: ${input.adjustmentReason}`]
+          .filter(Boolean)
+          .join(' · ') || undefined,
       set: {
         $set: {
           ...extraSet,

@@ -16,6 +16,7 @@ import { Select } from '@estene/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@estene/ui/table';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/shared/components/PageHeader';
+import { officeOptions, useOffices } from '../offices/offices.queries';
 import { QueryState } from '@/shared/components/QueryState';
 
 type Staff = AdminProfile & { isActive: boolean; lastLoginAt?: string };
@@ -26,6 +27,7 @@ const ROLE_HINT: Record<AdminRole, string> = {
   dispatcher: 'Assign riders and manage shipments',
   finance: 'Payments, payouts and pricing',
   support: 'View everything, book shipments for callers',
+  office_agent: 'Runs one office counter: drop-offs, manifests, collections',
 };
 
 export default function StaffPage() {
@@ -63,7 +65,10 @@ export default function StaffPage() {
                   </TD>
                   <TD>
                     <p>{humanize(s.role)}</p>
-                    <p className="text-muted-foreground text-xs">{ROLE_HINT[s.role]}</p>
+                    <p className="text-muted-foreground text-xs">
+                      {s.office ? `${s.office.name} · ` : ''}
+                      {ROLE_HINT[s.role]}
+                    </p>
                   </TD>
                   <TD className="text-muted-foreground">
                     {s.lastLoginAt ? formatRelativeDay(s.lastLoginAt) : 'Never'}
@@ -86,11 +91,17 @@ export default function StaffPage() {
 
 function AddStaffDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const { register, handleSubmit } = useForm<{ name: string; email: string; role: AdminRole }>({
+  const offices = useOffices();
+  const { register, handleSubmit, watch } = useForm<{
+    name: string;
+    email: string;
+    role: AdminRole;
+    officeId?: string;
+  }>({
     defaultValues: { role: 'dispatcher' },
   });
   const create = useMutation({
-    mutationFn: (body: { name: string; email: string; role: AdminRole }) =>
+    mutationFn: (body: { name: string; email: string; role: AdminRole; officeId?: string }) =>
       api.post<{ tempPassword: string }>('/staff', body),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['staff'] }),
   });
@@ -125,6 +136,15 @@ function AddStaffDialog({ onClose }: { onClose: () => void }) {
                 {...register('role')}
               />
             </Field>
+            {watch('role') === 'office_agent' && (
+              <Field label="Office" hint="Office agents only see and act for this office.">
+                <Select
+                  placeholder="Choose office"
+                  options={officeOptions(offices.data)}
+                  {...register('officeId', { setValueAs: (v: string) => v || undefined })}
+                />
+              </Field>
+            )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel

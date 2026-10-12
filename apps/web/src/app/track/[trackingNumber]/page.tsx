@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Check, PackageX } from 'lucide-react';
 import { SERVICE_LEVEL_META, type ShipmentStatus } from '@estene/contracts/enums';
-import { SHIPMENT_STATUS_META, TRACKING_MILESTONES } from '@estene/contracts/shipment-status';
+import { SHIPMENT_STATUS_META, trackingMilestones } from '@estene/contracts/shipment-status';
 import type { PublicTrackingDto } from '@estene/contracts/shipment';
 import { formatDateTime } from '@estene/lib/date';
 import { cn } from '@estene/lib/utils';
@@ -57,12 +57,17 @@ export default async function TrackingResultPage({ params }: Props) {
 
 function TrackingResult({ parcel }: { parcel: PublicTrackingDto }) {
   const meta = SHIPMENT_STATUS_META[parcel.status];
-  const reached = new Map<ShipmentStatus, string>();
-  parcel.events.forEach((e) => reached.set(e.status, e.at));
-  // Unpaid bookings are explained by the payment card instead of the generic help note.
-  const offPath =
-    !TRACKING_MILESTONES.includes(parcel.status) && parcel.status !== 'awaiting_payment';
-  const currentIdx = Math.max(...TRACKING_MILESTONES.map((m, i) => (reached.has(m) ? i : -1)));
+  // Steps depend on how it travels (door-to-door, via offices, interstate, collection).
+  const milestones = trackingMilestones(parcel.fulfilment);
+  /** When the nth occurrence of a status happened (interstate parcels reach `at_hub` twice). */
+  const reachedAt = (status: ShipmentStatus, occurrence: number) =>
+    parcel.events.filter((e) => e.status === status)[occurrence - 1]?.at;
+  const offPath = ['delivery_failed', 'returned', 'cancelled'].includes(parcel.status);
+  const currentIdx = Math.max(
+    ...milestones.map((m, i) => (reachedAt(m.status, m.occurrence) ? i : -1)),
+  );
+  const finished = parcel.status === 'delivered' || parcel.status === 'collected';
+  const collectAt = parcel.fulfilment.destinationOffice;
 
   return (
     <div className="space-y-8">
@@ -98,14 +103,37 @@ function TrackingResult({ parcel }: { parcel: PublicTrackingDto }) {
         )}
       </dl>
 
+      {collectAt && !finished && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm">
+          <p className="font-semibold text-slate-900">
+            {parcel.status === 'ready_for_collection'
+              ? 'Ready to collect at'
+              : 'Will be collected at'}{' '}
+            Estene {collectAt.name}, {collectAt.city}
+          </p>
+          <p className="mt-1 text-slate-600">
+            {collectAt.address}
+            {collectAt.landmark && ` · ${collectAt.landmark}`}
+          </p>
+          <p className="mt-1 text-slate-600">
+            {collectAt.openingHours} · {collectAt.phone}
+          </p>
+          {parcel.status === 'ready_for_collection' && (
+            <p className="mt-3 font-medium text-blue-900">
+              Bring the 4-digit PIN sent to the recipient’s phone.
+            </p>
+          )}
+        </div>
+      )}
+
       <ol className="space-y-0" aria-label="Delivery progress">
-        {TRACKING_MILESTONES.map((m, i) => {
-          const at = reached.get(m);
+        {milestones.map((m, i) => {
+          const at = reachedAt(m.status, m.occurrence);
           const done = i <= currentIdx;
-          const active = i === currentIdx && !offPath && parcel.status !== 'delivered';
+          const active = i === currentIdx && !offPath && !finished;
           return (
-            <li key={m} className="relative flex gap-4 pb-8 last:pb-0">
-              {i < TRACKING_MILESTONES.length - 1 && (
+            <li key={`${m.status}-${m.occurrence}`} className="relative flex gap-4 pb-8 last:pb-0">
+              {i < milestones.length - 1 && (
                 <span
                   className={cn(
                     'absolute left-[15px] top-8 h-[calc(100%-24px)] w-0.5',
@@ -127,9 +155,7 @@ function TrackingResult({ parcel }: { parcel: PublicTrackingDto }) {
                 {done && !active ? <Check className="size-4" /> : i + 1}
               </span>
               <div className="pt-1">
-                <p className={cn('font-medium', !done && 'text-slate-400')}>
-                  {SHIPMENT_STATUS_META[m].label}
-                </p>
+                <p className={cn('font-medium', !done && 'text-slate-400')}>{m.label}</p>
                 {at && <p className="text-sm text-slate-500">{formatDateTime(at)}</p>}
               </div>
             </li>

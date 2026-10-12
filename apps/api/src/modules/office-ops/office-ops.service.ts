@@ -95,9 +95,15 @@ export const OfficeOpsService = {
     actor: Actor,
   ) {
     const s = await requireAction(shipmentId, officeId, 'receive_dropoff');
-    const dto = await ShipmentsService.acceptParcel(s, 'at_hub', actor, input, {
-      currentOffice: new Types.ObjectId(officeId),
-    });
+    const office = await OfficeModel.findById(officeId, 'name').lean();
+    const dto = await ShipmentsService.acceptParcel(
+      s,
+      'at_hub',
+      actor,
+      input,
+      { currentOffice: new Types.ObjectId(officeId) },
+      `Dropped off at ${office?.name ?? 'the office'}`,
+    );
     if (s.paymentMethod === 'cash_on_pickup') {
       await PaymentsService.recordManual(s.id, actor.id!, {
         note: 'Cash paid at office drop-off',
@@ -114,8 +120,9 @@ export const OfficeOpsService = {
     const leg = s.rider
       ? await ShipmentsService.riderLeg(s, s.rider.toString(), 'first_mile')
       : null;
+    const office = await OfficeModel.findById(officeId, 'name').lean();
     await ShipmentsService.transition(s.id, 'at_hub', actor, {
-      note: 'Handed in by rider',
+      note: `Handed in by rider at ${office?.name ?? 'the office'}`,
       set: {
         $set: {
           currentOffice: new Types.ObjectId(officeId),
@@ -216,7 +223,10 @@ export const OfficeOpsService = {
           populate: { path: 'zone', select: 'city' },
         },
         { path: 'toOffice', select: 'name code zone', populate: { path: 'zone', select: 'city' } },
-        { path: 'shipments.shipment', select: 'trackingNumber tagCode status dropoff.area' },
+        {
+          path: 'shipments.shipment',
+          select: 'trackingNumber tagCode status dropoff.area fulfilment.deliveryMode',
+        },
         { path: 'createdBy', select: 'name' },
       ]),
       ManifestModel.find({ fromOffice: oid, status: 'open' }).populate([
@@ -226,12 +236,17 @@ export const OfficeOpsService = {
           populate: { path: 'zone', select: 'city' },
         },
         { path: 'toOffice', select: 'name code zone', populate: { path: 'zone', select: 'city' } },
-        { path: 'shipments.shipment', select: 'trackingNumber tagCode status dropoff.area' },
+        {
+          path: 'shipments.shipment',
+          select: 'trackingNumber tagCode status dropoff.area fulfilment.deliveryMode',
+        },
         { path: 'createdBy', select: 'name' },
       ]),
     ]);
 
-    const toSend = inOffice.filter((s) => !same(s.fulfilment?.destinationOffice, officeId));
+    const toSend = inOffice.filter(
+      (s) => !s.manifest && !same(s.fulfilment?.destinationOffice, officeId),
+    );
     const finalHere = inOffice.filter((s) => same(s.fulfilment?.destinationOffice, officeId));
     return {
       office: { id: office.id, name: office.name, code: office.code },

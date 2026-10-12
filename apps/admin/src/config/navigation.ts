@@ -2,7 +2,10 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Banknote,
   Bike,
+  Building,
   Building2,
+  ScanLine,
+  Truck,
   HandCoins,
   Receipt,
   LayoutDashboard,
@@ -24,10 +27,28 @@ export const NAV_SECTIONS: { title?: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: 'Office',
+    items: [
+      {
+        label: 'Counter',
+        to: '/office',
+        icon: ScanLine,
+        roles: ['office_agent', 'ops_manager', 'dispatcher', 'support'],
+      },
+      {
+        label: 'Manifests',
+        to: '/manifests',
+        icon: Truck,
+        roles: ['office_agent', 'ops_manager', 'dispatcher'],
+      },
+    ],
+  },
+  {
     title: 'Network',
     items: [
       { label: 'Riders', to: '/riders', icon: Bike },
       { label: 'Zones', to: '/zones', icon: Map },
+      { label: 'Offices', to: '/offices', icon: Building },
       { label: 'Parcel tags', to: '/tags', icon: QrCode },
     ],
   },

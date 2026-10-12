@@ -5,6 +5,7 @@ import type {
   QuoteRequest,
 } from '@estene/contracts/shipment';
 import type { QuoteLine } from '@estene/contracts/pricing';
+import type { PublicOfficeDto } from '@estene/contracts/office';
 import type { CheckoutSession, TransactionDto } from '@estene/contracts/payment';
 
 /** Prepaid bookings come back with either a hosted checkout or an account number to pay into. */
@@ -47,11 +48,19 @@ async function request<T>(
   return body.data;
 }
 
-export type PublicZone = { id: string; name: string; code: string; areas: string[] };
+export type PublicZone = {
+  id: string;
+  name: string;
+  code: string;
+  areas: string[];
+  city: string;
+  state: string;
+};
 
 export const publicApi = {
   /** Zones change rarely — cache for 5 minutes on the server. */
   zones: () => request<PublicZone[]>('/public/zones', { next: { revalidate: 300 } }),
+  offices: () => request<PublicOfficeDto[]>('/public/offices', { next: { revalidate: 300 } }),
   quote: (body: QuoteRequest) =>
     request<{ lines: QuoteLine[]; total: number }>('/public/quote', {
       method: 'POST',

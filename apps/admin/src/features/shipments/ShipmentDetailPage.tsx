@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { PARCEL_SIZE_META, SERVICE_LEVEL_META } from '@estene/contracts/enums';
 import { formatNaira } from '@estene/contracts/money';
 import { isTerminal } from '@estene/contracts/shipment-status';
-import type { StopDto } from '@estene/contracts/shipment';
+import type { ShipmentDto, StopDto } from '@estene/contracts/shipment';
 import { formatDateTime } from '@estene/lib/date';
 import { formatPhone, humanize } from '@estene/lib/utils';
 import { Badge } from '@estene/ui/badge';
@@ -17,6 +17,7 @@ import { ReasonDialog } from '@/shared/components/ReasonDialog';
 import { useCan } from '@/shared/hooks/useCan';
 import { AssignRiderDialog } from './components/AssignRiderDialog';
 import { ShipmentTimeline } from './components/ShipmentTimeline';
+import { RouteCard } from './components/RouteCard';
 import { ShipmentPaymentsCard } from '../payments/components/ShipmentPaymentsCard';
 import { useCancelShipment, useShipment, useUnassignRider } from './shipments.queries';
 
@@ -105,9 +106,20 @@ export default function ShipmentDetailPage() {
 
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="space-y-6 lg:col-span-2">
+                <RouteCard shipment={o} />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <StopCard title="Pickup" stop={o.pickup} />
-                  <StopCard title="Drop-off" stop={o.dropoff} />
+                  <StopCard
+                    title={o.fulfilment.originMode === 'dropoff' ? 'Sender (drop-off)' : 'Pickup'}
+                    stop={o.pickup}
+                  />
+                  <StopCard
+                    title={
+                      o.fulfilment.deliveryMode === 'collection'
+                        ? 'Recipient (collects)'
+                        : 'Drop-off'
+                    }
+                    stop={o.dropoff}
+                  />
                 </div>
 
                 <Card>
@@ -207,9 +219,7 @@ export default function ShipmentDetailPage() {
                         </p>
                       </Link>
                     ) : (
-                      <p className="text-muted-foreground">
-                        Not assigned yet — automatic dispatch is offering this job to nearby riders.
-                      </p>
+                      <p className="text-muted-foreground">{noRiderText(o)}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -298,4 +308,28 @@ function Detail({
       <div className="mt-0.5 font-medium">{children}</div>
     </div>
   );
+}
+
+/** Why there's no rider right now — office legs don't need one. */
+function noRiderText(o: ShipmentDto) {
+  const f = o.fulfilment;
+  if (o.status === 'collected') return 'No rider — the recipient collected it from the office.';
+  if (['delivered', 'cancelled', 'returned', 'failed'].includes(o.status))
+    return 'No rider on this shipment now.';
+  if (o.status === 'created' && f.originMode === 'dropoff')
+    return `No rider needed yet — the sender drops it off at ${f.originOffice?.name ?? 'the office'}.`;
+  if (o.status === 'in_transit' && f.manifest)
+    return `On the road between offices (manifest ${f.manifest.code}).`;
+  if (o.status === 'ready_for_collection')
+    return 'No rider needed — waiting for the recipient to collect.';
+  if (
+    f.currentOffice &&
+    !(
+      o.status === 'at_hub' &&
+      f.deliveryMode === 'door' &&
+      f.currentOffice.id === f.destinationOffice?.id
+    )
+  )
+    return `At ${f.currentOffice.name} — no rider needed for this step.`;
+  return 'Not assigned yet — automatic dispatch is offering this job to nearby riders.';
 }

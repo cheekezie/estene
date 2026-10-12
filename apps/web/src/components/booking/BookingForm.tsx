@@ -20,6 +20,7 @@ import { Input, controlClass } from '@estene/ui/input';
 import { Textarea } from '@estene/ui/textarea';
 import { useDebounce } from '@estene/ui/hooks/useDebounce';
 import { PublicApiError, publicApi, type PublicZone } from '@/lib/api';
+import type { PublicOfficeDto } from '@estene/contracts/office';
 import { TransferInstructions } from '@/components/TransferInstructions';
 import type { TransactionDto } from '@estene/contracts/payment';
 import {
@@ -48,13 +49,40 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string; hint: string; disa
 type Quote = { lines: QuoteLine[]; total: number };
 type Booked = { trackingNumber: string; total: number; transfer?: TransactionDto };
 
-export function BookingForm({ zones }: { zones: PublicZone[] }) {
+export function BookingForm({
+  zones,
+  offices,
+}: {
+  zones: PublicZone[];
+  offices: PublicOfficeDto[];
+}) {
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<BookingDraft>(EMPTY_DRAFT);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [booked, setBooked] = useState<Booked | null>(null);
-  const quote = useLiveQuote(draft);
+  // Price from the office's zone when an office replaces an address.
+  const officeSlot = (id: string) => {
+    const o = offices.find((x) => x.id === id);
+    return o ? `${o.zoneId}|${o.area}` : '';
+  };
+  const effective = {
+    ...draft,
+    pickupSlot:
+      draft.originMode === 'dropoff' ? officeSlot(draft.originOfficeId) : draft.pickupSlot,
+    dropoffSlot:
+      draft.deliveryMode === 'collection'
+        ? officeSlot(draft.destinationOfficeId)
+        : draft.dropoffSlot,
+  };
+  const quote = useLiveQuote(effective);
+  const stateOf = (slot: string) => zones.find((z) => z.id === splitSlot(slot).zoneId)?.state;
+  const interstate =
+    !!stateOf(effective.pickupSlot) &&
+    !!stateOf(effective.dropoffSlot) &&
+    stateOf(effective.pickupSlot) !== stateOf(effective.dropoffSlot);
+  const originOffice = offices.find((o) => o.id === draft.originOfficeId);
+  const destinationOffice = offices.find((o) => o.id === draft.destinationOfficeId);
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -111,22 +139,82 @@ export function BookingForm({ zones }: { zones: PublicZone[] }) {
 
         {step === 0 && (
           <div className="mt-8 space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Pickup area" error={errors.pickupSlot}>
-                <AreaSelect
-                  zones={zones}
-                  value={draft.pickupSlot}
-                  onChange={(v) => set('pickupSlot', v)}
-                />
-              </Field>
-              <Field label="Drop-off area" error={errors.dropoffSlot}>
-                <AreaSelect
-                  zones={zones}
-                  value={draft.dropoffSlot}
-                  onChange={(v) => set('dropoffSlot', v)}
-                />
-              </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <fieldset className="space-y-2">
+                <legend className="mb-2 text-sm font-medium">How we get it</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <ChoiceCard
+                    selected={draft.originMode === 'pickup'}
+                    onSelect={() => set('originMode', 'pickup')}
+                    title="Rider picks up"
+                    hint="From your address"
+                  />
+                  <ChoiceCard
+                    selected={draft.originMode === 'dropoff'}
+                    onSelect={() => set('originMode', 'dropoff')}
+                    title="I’ll drop it off"
+                    hint="At an Estene office"
+                  />
+                </div>
+                {draft.originMode === 'pickup' ? (
+                  <Field label="Pickup area" error={errors.pickupSlot}>
+                    <AreaSelect
+                      zones={zones}
+                      value={draft.pickupSlot}
+                      onChange={(v) => set('pickupSlot', v)}
+                    />
+                  </Field>
+                ) : (
+                  <Field label="Drop-off office" error={errors.originOfficeId}>
+                    <OfficeSelect
+                      offices={offices}
+                      value={draft.originOfficeId}
+                      onChange={(v) => set('originOfficeId', v)}
+                    />
+                  </Field>
+                )}
+              </fieldset>
+              <fieldset className="space-y-2">
+                <legend className="mb-2 text-sm font-medium">How they receive it</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <ChoiceCard
+                    selected={draft.deliveryMode === 'door'}
+                    onSelect={() => set('deliveryMode', 'door')}
+                    title="To their door"
+                    hint="A rider delivers"
+                  />
+                  <ChoiceCard
+                    selected={draft.deliveryMode === 'collection'}
+                    onSelect={() => set('deliveryMode', 'collection')}
+                    title="They collect"
+                    hint="At an Estene office"
+                  />
+                </div>
+                {draft.deliveryMode === 'door' ? (
+                  <Field label="Delivery area" error={errors.dropoffSlot}>
+                    <AreaSelect
+                      zones={zones}
+                      value={draft.dropoffSlot}
+                      onChange={(v) => set('dropoffSlot', v)}
+                    />
+                  </Field>
+                ) : (
+                  <Field label="Collection office" error={errors.destinationOfficeId}>
+                    <OfficeSelect
+                      offices={offices}
+                      value={draft.destinationOfficeId}
+                      onChange={(v) => set('destinationOfficeId', v)}
+                    />
+                  </Field>
+                )}
+              </fieldset>
             </div>
+            {interstate && (
+              <p className="bg-primary-soft rounded-xl p-4 text-sm text-blue-900">
+                <strong>Interstate delivery.</strong> Your parcel travels between Estene offices and
+                usually arrives in 2–4 days.
+              </p>
+            )}
 
             <fieldset>
               <legend className="text-sm font-medium">Parcel size</legend>
@@ -202,7 +290,12 @@ export function BookingForm({ zones }: { zones: PublicZone[] }) {
 
         {step === 1 && (
           <div className="mt-8 space-y-8">
-            <ContactBlock title="Pickup — you" area={splitSlot(draft.pickupSlot).area}>
+            <ContactBlock
+              title={draft.originMode === 'dropoff' ? 'Sender — you' : 'Pickup — you'}
+              area={
+                originOffice ? `drop off at ${originOffice.name}` : splitSlot(draft.pickupSlot).area
+              }
+            >
               <Field label="Your name" error={errors.senderName}>
                 <Input
                   autoComplete="name"
@@ -219,26 +312,41 @@ export function BookingForm({ zones }: { zones: PublicZone[] }) {
                   onChange={(e) => set('senderPhone', e.target.value)}
                 />
               </Field>
-              <Field label="Pickup address" error={errors.pickupAddress} className="sm:col-span-2">
-                <Input
-                  autoComplete="street-address"
-                  value={draft.pickupAddress}
-                  onChange={(e) => set('pickupAddress', e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Landmark (optional)"
-                error={errors.pickupLandmark}
-                className="sm:col-span-2"
-              >
-                <Input
-                  placeholder="e.g. Opposite Banex Plaza"
-                  value={draft.pickupLandmark}
-                  onChange={(e) => set('pickupLandmark', e.target.value)}
-                />
-              </Field>
+              {draft.originMode === 'pickup' && (
+                <>
+                  <Field
+                    label="Pickup address"
+                    error={errors.pickupAddress}
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      autoComplete="street-address"
+                      value={draft.pickupAddress}
+                      onChange={(e) => set('pickupAddress', e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="Landmark (optional)"
+                    error={errors.pickupLandmark}
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      placeholder="e.g. Opposite Banex Plaza"
+                      value={draft.pickupLandmark}
+                      onChange={(e) => set('pickupLandmark', e.target.value)}
+                    />
+                  </Field>
+                </>
+              )}
             </ContactBlock>
-            <ContactBlock title="Drop-off — recipient" area={splitSlot(draft.dropoffSlot).area}>
+            <ContactBlock
+              title={draft.deliveryMode === 'collection' ? 'Recipient' : 'Drop-off — recipient'}
+              area={
+                destinationOffice
+                  ? `collects at ${destinationOffice.name}`
+                  : splitSlot(draft.dropoffSlot).area
+              }
+            >
               <Field label="Recipient's name" error={errors.recipientName}>
                 <Input
                   value={draft.recipientName}
@@ -257,26 +365,30 @@ export function BookingForm({ zones }: { zones: PublicZone[] }) {
                   onChange={(e) => set('recipientPhone', e.target.value)}
                 />
               </Field>
-              <Field
-                label="Drop-off address"
-                error={errors.dropoffAddress}
-                className="sm:col-span-2"
-              >
-                <Input
-                  value={draft.dropoffAddress}
-                  onChange={(e) => set('dropoffAddress', e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Landmark (optional)"
-                error={errors.dropoffLandmark}
-                className="sm:col-span-2"
-              >
-                <Input
-                  value={draft.dropoffLandmark}
-                  onChange={(e) => set('dropoffLandmark', e.target.value)}
-                />
-              </Field>
+              {draft.deliveryMode === 'door' && (
+                <>
+                  <Field
+                    label="Drop-off address"
+                    error={errors.dropoffAddress}
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      value={draft.dropoffAddress}
+                      onChange={(e) => set('dropoffAddress', e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="Landmark (optional)"
+                    error={errors.dropoffLandmark}
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      value={draft.dropoffLandmark}
+                      onChange={(e) => set('dropoffLandmark', e.target.value)}
+                    />
+                  </Field>
+                </>
+              )}
             </ContactBlock>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Email for receipt (optional)" error={errors.senderEmail}>
@@ -301,7 +413,13 @@ export function BookingForm({ zones }: { zones: PublicZone[] }) {
 
         {step === 2 && (
           <div className="mt-8 space-y-6">
-            <Review draft={draft} />
+            <Review
+              draft={draft}
+              originOffice={draft.originMode === 'dropoff' ? originOffice : undefined}
+              destinationOffice={
+                draft.deliveryMode === 'collection' ? destinationOffice : undefined
+              }
+            />
             <fieldset>
               <legend className="text-sm font-medium">How will you pay?</legend>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -568,7 +686,15 @@ function ContactBlock({
   );
 }
 
-function Review({ draft }: { draft: BookingDraft }) {
+function Review({
+  draft,
+  originOffice,
+  destinationOffice,
+}: {
+  draft: BookingDraft;
+  originOffice?: PublicOfficeDto;
+  destinationOffice?: PublicOfficeDto;
+}) {
   const p = splitSlot(draft.pickupSlot);
   const d = splitSlot(draft.dropoffSlot);
   return (
@@ -579,7 +705,9 @@ function Review({ draft }: { draft: BookingDraft }) {
           {draft.senderName} · {draft.senderPhone}
         </dd>
         <dd className="text-slate-600">
-          {draft.pickupAddress}, {p.area}
+          {originOffice
+            ? `You drop it at ${originOffice.name}, ${originOffice.address}`
+            : `${draft.pickupAddress}, ${p.area}`}
         </dd>
       </div>
       <div>
@@ -588,7 +716,9 @@ function Review({ draft }: { draft: BookingDraft }) {
           {draft.recipientName} · {draft.recipientPhone}
         </dd>
         <dd className="text-slate-600">
-          {draft.dropoffAddress}, {d.area}
+          {destinationOffice
+            ? `Collects at ${destinationOffice.name}, ${destinationOffice.address}`
+            : `${draft.dropoffAddress}, ${d.area}`}
         </dd>
       </div>
       <div>
@@ -651,5 +781,39 @@ function BookingConfirmed({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Offices grouped by city, with address in the label so customers can pick the nearest. */
+function OfficeSelect({
+  offices,
+  value,
+  onChange,
+  ...rest
+}: { offices: PublicOfficeDto[]; value: string; onChange: (v: string) => void } & Omit<
+  ComponentProps<'select'>,
+  'value' | 'onChange'
+>) {
+  const cities = [...new Set(offices.map((o) => o.city))];
+  return (
+    <select
+      {...rest}
+      className={cn(controlClass, 'h-11')}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">Select an office</option>
+      {cities.map((city) => (
+        <optgroup key={city} label={city}>
+          {offices
+            .filter((o) => o.city === city)
+            .map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} — {o.address}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }
