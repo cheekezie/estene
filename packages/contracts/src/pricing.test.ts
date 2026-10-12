@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { computeQuote, DEFAULT_PRICING_CONFIG as cfg } from './pricing';
-import { canTransition } from './order-status';
+import { canTransition } from './shipment-status';
 
-const base = { routeFare: 200_000, size: 'small', weightKg: 2, serviceLevel: 'standard', fragile: false, declaredValue: 0 } as const;
+const base = {
+  routeFare: 200_000,
+  size: 'small',
+  weightKg: 2,
+  serviceLevel: 'standard',
+  fragile: false,
+  declaredValue: 0,
+} as const;
 
 describe('computeQuote', () => {
   it('adds route fare and size fee, rounded up to ₦50', () => {
@@ -28,7 +35,7 @@ describe('computeQuote', () => {
   });
 });
 
-describe('order state machine', () => {
+describe('shipment state machine', () => {
   it('blocks skipping straight to delivered', () => {
     expect(canTransition('created', 'delivered', 'rider')).toBe(false);
   });

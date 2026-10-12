@@ -16,9 +16,23 @@ export const TagsService = {
   async list(page: number, limit: number, status?: string) {
     const filter = status ? { status } : {};
     const [items, total] = await Promise.all([
-      ParcelTagModel.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      ParcelTagModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
       ParcelTagModel.countDocuments(filter),
     ]);
-    return paginate(items.map((t) => ({ code: t.code, batch: t.batch, status: t.status, order: t.order?.toString() })), total, page, limit);
+    return paginate(
+      items.map((t) => ({
+        code: t.code,
+        batch: t.batch,
+        status: t.status,
+        shipment: t.shipment?.toString(),
+      })),
+      total,
+      page,
+      limit,
+    );
   },
 };

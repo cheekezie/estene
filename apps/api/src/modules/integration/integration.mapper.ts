@@ -1,8 +1,8 @@
 import type { Types } from 'mongoose';
-import type { IntegrationOrderDto } from '@estene/contracts/order';
-import { ORDER_STATUS_META } from '@estene/contracts/order-status';
+import type { IntegrationShipmentDto } from '@estene/contracts/shipment';
+import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { env } from '../../config/env';
-import type { IOrder, IStop } from '../orders/models/order.model';
+import type { IShipment, IStop } from '../shipments/models/shipment.model';
 
 type ZoneRef = { _id: Types.ObjectId; name: string; code: string };
 
@@ -16,19 +16,21 @@ const stop = (s: IStop) => ({
 });
 
 /**
- * The integration-facing order shape. Kept explicit and versioned with the
+ * The integration-facing shipment shape. Kept explicit and versioned with the
  * /v1 API: changing a field here is a breaking change for every integrator.
- * Expects an order populated with ORDER_POPULATE.
+ * Expects an shipment populated with SHIPMENT_POPULATE.
  */
-export function toIntegrationOrderDto(o: IOrder & { updatedAt: Date }): IntegrationOrderDto {
+export function toIntegrationShipmentDto(
+  o: IShipment & { updatedAt: Date },
+): IntegrationShipmentDto {
   const rider = o.rider as unknown as { firstName: string } | null;
   return {
     id: o._id.toString(),
     trackingNumber: o.trackingNumber,
     trackingUrl: `${env.PUBLIC_SITE_URL}/track/${o.trackingNumber}`,
-    externalReference: o.externalReference ?? null,
+    clientReference: o.clientReference ?? null,
     status: o.status,
-    statusLabel: ORDER_STATUS_META[o.status].label,
+    statusLabel: SHIPMENT_STATUS_META[o.status].label,
     pickup: stop(o.pickup),
     dropoff: stop(o.dropoff),
     parcel: o.parcel,

@@ -4,7 +4,7 @@
 
 ```
  Public web (Next.js) ─┐
- Admin console (Vite) ─┼──HTTPS──▶  API (Fastify)  ──▶ MongoDB   orders, riders, zones, ledger
+ Admin console (Vite) ─┼──HTTPS──▶  API (Fastify)  ──▶ MongoDB   shipments, riders, zones, ledger
  Rider app (Expo)  ────┘              │    ▲          Redis     rider presence (GEO), rate limits,
                                       │    │                    BullMQ queues
                                       ▼    │
@@ -28,15 +28,15 @@ The shape is still eduspace: a pnpm/Turbo monorepo, zero-build TS packages, `fea
 apps, Fastify modules (`*.routes.ts` / `*.service.ts` / `models/`), the `{ success, statusCode, data }`
 envelope and `AppError`. These are the deliberate improvements:
 
-1. **API in the same monorepo, sharing `@estene/contracts`.** Request schemas, enums, the order state
+1. **API in the same monorepo, sharing `@estene/contracts`.** Request schemas, enums, the shipment state
    machine and the pricing formula exist once. The admin form, the public booking form and the API all
    validate with the same Zod schema. The website's quote and the API's charge run the same `computeQuote`.
 2. **Controllers folded into routes.** Handlers are one-liners (`parse` → service → `send`), so a separate
    controller file only added indirection. Business logic lives in services.
-3. **Explicit order state machine.** `canTransition(from, to, actor)` guards every status change, and
+3. **Explicit shipment state machine.** `canTransition(from, to, actor)` guards every status change, and
    updates compare-and-set on the current status. Two riders can't both accept a job, and nobody can
    skip from `created` to `delivered`.
-4. **Domain events plus queues.** Services emit facts (`order.status_changed`). Notifications, ledger
+4. **Domain events plus queues.** Services emit facts (`shipment.status_changed`). Notifications, ledger
    posting and dispatch subscribe to them. Anything slow or retryable goes through BullMQ, so an SMS
    gateway outage never blocks a rider's scan.
 5. **Money is integer kobo, kept in an append-only ledger** with idempotency keys. There are no floats
@@ -62,19 +62,19 @@ for same-zone trips, otherwise a zone↔zone `RouteRate`, otherwise the default 
 - a service-level multiplier
 - optional fragile handling and goods protection
 
-Totals round up to the configured naira step. The result is stored on the order as the **estimate**,
+Totals round up to the configured naira step. The result is stored on the shipment as the **estimate**,
 with the pricing version.
 
 ### Dispatch (`modules/dispatch`)
 
-1. `order.created` → a `dispatch-order` job.
+1. `shipment.created` → a `dispatch-shipment` job.
 2. Candidates are riders who are **online** and **physically within** the pickup zone's radius plus 3 km
    (Redis `GEOSEARCH`). Riders below the job cap and not already declined stay in.
 3. Rank: tier 0 is the pickup zone as the rider's primary zone, tier 1 is a coverage zone, tier 2 is just
    nearby. Within a tier, fewer active jobs wins, then the shorter distance. See `dispatch.ranking.ts`.
 4. The top rider gets a 45-second offer. Accept assigns the job. Decline or timeout moves to the next rider.
 5. If nobody is found, it retries every minute for ~15 minutes, then flags `dispatch.state = unassigned`
-   for manual assignment. The dashboard highlights these orders.
+   for manual assignment. The dashboard highlights these shipments.
 
 ### Pickup and delivery (rider app endpoints)
 
@@ -85,9 +85,9 @@ with the pricing version.
   **PIN** (5 attempts, then photo only) or a **photo**. The PIN reaches the recipient by SMS at
   `out_for_delivery`.
 
-### Order channels and business clients
+### Shipment channels and business clients
 
-Each order records its `source`:
+Each shipment records its `source`:
 
 | Source  | Who books it                    | Actor on the timeline |
 | ------- | ------------------------------- | --------------------- |
@@ -95,9 +95,9 @@ Each order records its `source`:
 | `admin` | Phone booking keyed in by staff | `admin`               |
 | `api`   | Business integration            | `client`              |
 
-An order can belong to a business **client** (`clients` module). Admin can book on a
-client's behalf, and API orders always belong to the calling client. Clients can be billed
-`on_account`: delivery posts an `order_charge` tagged with the client, and marking it paid
+An shipment can belong to a business **client** (`clients` module). Admin can book on a
+client's behalf, and API shipments always belong to the calling client. Clients can be billed
+`on_account`: delivery posts an `shipment_charge` tagged with the client, and marking it paid
 posts `payment_received`. The difference is the client's outstanding balance.
 
 **API keys:**
@@ -110,14 +110,18 @@ posts `payment_received`. The difference is the client's outstanding balance.
 
 - `/api/v1`, documented for integrators in [`integrations.md`](integrations.md).
 - Every query is scoped to the calling client.
-- Creates are idempotent on `(client, externalReference)` through a unique index.
-- The response shape is `IntegrationOrderDto`. Changing it is a breaking change.
+- Creates are idempotent on `(client, clientReference)` through a unique index.
+- The response shape is `IntegrationShipmentDto`. Changing it is a breaking change.
 
 ### Webhooks (`modules/webhooks`)
 
-Listeners on `order.created`, `order.status_changed` and `order.price_adjusted` enqueue a
-`WebhookDelivery` row for subscribed clients. The row stores the exact JSON body. A
-BullMQ worker sends it with:
+Internal domain events (`shipment.created`, `shipment.status_changed`, `shipment.price_adjusted`)
+are translated into the **public, one-event-per-milestone vocabulary** (`shipment.picked_up`,
+`shipment.delivered`, …). The mapping lives in `@estene/contracts/webhook-events`, along with
+the human titles. For subscribed clients, each event becomes a `WebhookDeliveryDto` row with a
+`title`, a one-sentence `summary` (`webhooks.summary.ts`) and the exact JSON body. Each
+attempt records the status code, duration and the first 1 KB of the response, which feeds the
+Developer tab in the admin.
 
 - `Estene-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")`
 - a 10 s timeout
@@ -132,12 +136,12 @@ In production, URLs must be https and must not resolve to private, loopback or
 link-local addresses (SSRF). That is checked at send time, after DNS resolution.
 Deliveries expire after 30 days because they contain customer contact details.
 
-`order.created` fires exactly once per order. Putting an order back into dispatch emits
+`shipment.created` fires exactly once per shipment. Putting an shipment back into dispatch emits
 `dispatch.requested` instead, so clients and SMS never see a duplicate "created".
 
 ### Finance
 
-On `delivered`, `order_charge` is posted. Then:
+On `delivered`, `shipment_charge` is posted. Then:
 
 - **Company rider:** the full fare is `platform_revenue`.
 - **Partner rider:** the commission (per rider, or the platform default) is `platform_revenue` and the
@@ -162,7 +166,7 @@ Rider balance = earnings − payouts − cash held.
    - QR scan for pickup and delivery, PIN entry, photo capture
 2. **Uploads:** presigned R2/S3 URLs for delivery photos and rider KYC documents.
 3. **Payments:** Paystack card and transfer with a verified webhook → `payment_received`.
-4. **Customer accounts:** phone OTP sign-in, order history, saved addresses.
+4. **Customer accounts:** phone OTP sign-in, shipment history, saved addresses.
 5. **Live ops map:** Socket.IO and map tiles in the admin, plus a rider live view.
 6. **Notifications:** WhatsApp and email channels, and push for riders.
 7. **Client self-service portal:** keys, webhook settings, delivery log, invoices and statements;

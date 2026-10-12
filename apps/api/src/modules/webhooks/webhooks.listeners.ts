@@ -1,19 +1,23 @@
+import { webhookEventForStatus } from '@estene/contracts/webhook-events';
 import { bus } from '../../lib/events';
 import { startWorker } from '../../lib/queue';
 import { WEBHOOK_QUEUE, WebhooksService } from './webhooks.service';
 
+/** Internal domain events → the public, one-event-per-milestone webhook vocabulary. */
 export function registerWebhooks() {
-  bus.on('order.created', ({ orderId }) =>
-    WebhooksService.notifyOrderEvent('order.created', orderId),
+  bus.on('shipment.created', ({ shipmentId }) =>
+    WebhooksService.notifyShipmentEvent('shipment.created', shipmentId),
   );
-  bus.on('order.status_changed', ({ orderId, from, to }) =>
-    WebhooksService.notifyOrderEvent('order.status_changed', orderId, {
+
+  bus.on('shipment.status_changed', ({ shipmentId, from, to }) =>
+    WebhooksService.notifyShipmentEvent(webhookEventForStatus(to), shipmentId, {
       previousStatus: from,
       status: to,
     }),
   );
-  bus.on('order.price_adjusted', ({ orderId, from, to, reason }) =>
-    WebhooksService.notifyOrderEvent('order.price_adjusted', orderId, {
+
+  bus.on('shipment.price_adjusted', ({ shipmentId, from, to, reason }) =>
+    WebhooksService.notifyShipmentEvent('shipment.price_adjusted', shipmentId, {
       previousAmount: from,
       amount: to,
       reason: reason ?? null,

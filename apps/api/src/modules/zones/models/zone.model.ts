@@ -6,7 +6,7 @@ export interface IZone {
   code: string;
   city: string;
   areas: string[];
-  /** GeoJSON point — [lng, lat] order, as Mongo requires. */
+  /** GeoJSON point — [lng, lat] shipment, as Mongo requires. */
   center: { type: 'Point'; coordinates: [number, number] };
   radiusKm: number;
   intraZoneFare: number;

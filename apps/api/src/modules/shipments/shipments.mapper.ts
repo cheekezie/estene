@@ -1,6 +1,6 @@
 import type { Types } from 'mongoose';
-import type { OrderDto, PublicTrackingDto, StopDto } from '@estene/contracts/order';
-import type { IOrder, IStop } from './models/order.model';
+import type { ShipmentDto, PublicTrackingDto, StopDto } from '@estene/contracts/shipment';
+import type { IShipment, IStop } from './models/shipment.model';
 
 type ZoneRef = { _id: Types.ObjectId; name: string; code: string };
 type RiderRef = {
@@ -11,8 +11,8 @@ type RiderRef = {
   code: string;
 };
 
-/** Orders are always loaded with `.populate(ORDER_POPULATE)` before mapping. */
-export const ORDER_POPULATE = [
+/** Shipments are always loaded with `.populate(SHIPMENT_POPULATE)` before mapping. */
+export const SHIPMENT_POPULATE = [
   { path: 'pickup.zone', select: 'name code' },
   { path: 'dropoff.zone', select: 'name code' },
   { path: 'rider', select: 'firstName lastName phone code' },
@@ -34,12 +34,12 @@ const toStopDto = (s: IStop): StopDto => {
   };
 };
 
-const clientRef = (o: IOrder) => {
+const clientRef = (o: IShipment) => {
   const c = o.client as unknown as { _id: Types.ObjectId; name: string } | null | undefined;
   return c && 'name' in c ? { id: c._id.toString(), name: c.name } : null;
 };
 
-export function toOrderDto(o: IOrder): OrderDto {
+export function toShipmentDto(o: IShipment): ShipmentDto {
   const rider = o.rider as unknown as RiderRef | null;
   return {
     id: o._id.toString(),
@@ -47,7 +47,7 @@ export function toOrderDto(o: IOrder): OrderDto {
     status: o.status,
     source: o.source,
     client: clientRef(o),
-    externalReference: o.externalReference,
+    clientReference: o.clientReference,
     pickup: toStopDto(o.pickup),
     dropoff: toStopDto(o.dropoff),
     parcel: o.parcel,
@@ -85,7 +85,7 @@ export function toOrderDto(o: IOrder): OrderDto {
   };
 }
 
-export function toPublicTrackingDto(o: IOrder): PublicTrackingDto {
+export function toPublicTrackingDto(o: IShipment): PublicTrackingDto {
   const rider = o.rider as unknown as RiderRef | null;
   return {
     trackingNumber: o.trackingNumber,
@@ -100,5 +100,5 @@ export function toPublicTrackingDto(o: IOrder): PublicTrackingDto {
 }
 
 /** Amount the customer actually owes: the rider-confirmed price, else the estimate. */
-export const payableAmount = (o: Pick<IOrder, 'finalAmount' | 'estimate'>) =>
+export const payableAmount = (o: Pick<IShipment, 'finalAmount' | 'estimate'>) =>
   o.finalAmount ?? o.estimate.total;

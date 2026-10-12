@@ -26,7 +26,7 @@ the old one so you can rotate without downtime.
 Every response uses the same envelope:
 
 ```json
-{ "success": true, "statusCode": 201, "message": "Order created", "data": { … } }
+{ "success": true, "statusCode": 201, "message": "Shipment created", "data": { … } }
 ```
 
 ```json
@@ -44,11 +44,11 @@ Every response uses the same envelope:
 | 400    | `VALIDATION_ERROR`                  | A field is invalid — see `errors` (field path → message)                               |
 | 400    | `BAD_REQUEST`, `INVALID_TRANSITION` | Request is valid but not allowed (e.g. area not served, cancelling a picked-up parcel) |
 | 401    | `UNAUTHORIZED`                      | Missing, invalid or revoked API key, or account suspended                              |
-| 404    | `NOT_FOUND`                         | No such order **for your account**                                                     |
+| 404    | `NOT_FOUND`                         | No such shipment **for your account**                                                  |
 | 429    | `RATE_LIMITED`                      | Slow down; retry after a short wait                                                    |
-| 5xx    | `INTERNAL_ERROR`                    | Our fault — safe to retry with the same `externalReference`                            |
+| 5xx    | `INTERNAL_ERROR`                    | Our fault — safe to retry with the same `clientReference`                              |
 
-**Rate limits** (per API key, per minute): 60 order creates, 120 quotes/lists, 300 order lookups.
+**Rate limits** (per API key, per minute): 60 shipment creates, 120 quotes/lists, 300 shipment lookups.
 
 ## Endpoints
 
@@ -93,16 +93,16 @@ list for a few hours; it changes rarely.
 | `declaredValue` | Kobo. Above 0 adds goods protection.                                                              |
 
 Prices are **estimates**: the rider checks size and weight at pickup. If they differ, the
-price is recalculated with the same rules, and you get an `order.price_adjusted` webhook.
+price is recalculated with the same rules, and you get an `shipment.price_adjusted` webhook.
 
-### `POST /orders` — book a delivery
+### `POST /shipments` — book a delivery
 
 ```bash
-curl -X POST https://api.estene.ng/api/v1/orders \
+curl -X POST https://api.estene.ng/api/v1/shipments \
   -H "Authorization: Bearer $ESTENE_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "externalReference": "SO-10023",
+    "clientReference": "SO-10023",
     "pickup":  { "contactName": "Store 4", "phone": "08021112222", "zoneId": "6acc…b9", "area": "Wuse II",
                  "address": "Plot 1 Hub Road", "landmark": "Behind Banex" },
     "dropoff": { "contactName": "Ngozi Eze", "phone": "08064445555", "zoneId": "6acc…b7", "area": "Garki II",
@@ -114,47 +114,47 @@ curl -X POST https://api.estene.ng/api/v1/orders \
   }'
 ```
 
-| Field                                  | Notes                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `externalReference`                    | **Recommended.** Your order id (≤64 chars). Makes the call idempotent (see below).         |
-| `paymentMethod`                        | `on_account` (default — invoiced to your business) · `cash_on_pickup` · `cash_on_delivery` |
-| `pickup.location` / `dropoff.location` | Optional `{ "lat": 9.07, "lng": 7.48 }` — improves rider matching                          |
-| `senderEmail`, `notes`                 | Optional                                                                                   |
+| Field                                  | Notes                                                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `clientReference`                      | **Recommended.** Your own id for this delivery — typically your sales order number (≤64 chars). Makes the call idempotent (see below). |
+| `paymentMethod`                        | `on_account` (default — invoiced to your business) · `cash_on_pickup` · `cash_on_delivery`                                             |
+| `pickup.location` / `dropoff.location` | Optional `{ "lat": 9.07, "lng": 7.48 }` — improves rider matching                                                                      |
+| `senderEmail`, `notes`                 | Optional                                                                                                                               |
 
-Returns **201** with the [order object](#the-order-object).
+Returns **201** with the [shipment object](#the-shipment-object).
 
-**Idempotency.** If you send an `externalReference` you have used before, we don't create
-a second order. You get the original back with **200** and the message
-`Order already exists for this externalReference`. After a timeout or a 5xx, retry
+**Idempotency.** If you send an `clientReference` you have used before, we don't create
+a second shipment. You get the original back with **200** and the message
+`Shipment already exists for this clientReference`. After a timeout or a 5xx, retry
 with the same body. That is always safe.
 
 The recipient gets an SMS with the tracking link. When the parcel is out for delivery,
 they get a **4-digit delivery PIN** to give the rider. The PIN is never exposed through
 the API.
 
-### `GET /orders` — list your orders
+### `GET /shipments` — list your shipments
 
-Query: `page`, `limit` (≤100), `status`, `externalReference`. Returns
+Query: `page`, `limit` (≤100), `status`, `clientReference`. Returns
 `{ items, page, limit, total, totalPages }`.
 
-### `GET /orders/{ref}` — one order
+### `GET /shipments/{ref}` — one shipment
 
-`{ref}` can be our `id`, the `trackingNumber`, or your `externalReference`.
+`{ref}` can be our `id`, the `trackingNumber`, or your `clientReference`.
 
-### `POST /orders/{ref}/cancel`
+### `POST /shipments/{ref}/cancel`
 
 Body (optional): `{ "reason": "Customer cancelled" }`. You can cancel until a rider
 is on the way to pickup. After that you get `400 INVALID_TRANSITION`; call Estene
 operations instead.
 
-## The order object
+## The shipment object
 
 ```json
 {
   "id": "6acca0ec521ff1d44cd25178",
   "trackingNumber": "ESTFS7R5CYT0",
   "trackingUrl": "https://estene.ng/track/ESTFS7R5CYT0",
-  "externalReference": "SO-10023",
+  "clientReference": "SO-10023",
   "status": "out_for_delivery",
   "statusLabel": "Out for delivery",
   "pickup":  { "contactName": "Store 4", "phone": "+2348021112222", "area": "Wuse II", "address": "Plot 1 Hub Road", "landmark": "Behind Banex", "zone": "WSE" },
@@ -190,15 +190,28 @@ gracefully; we may add new ones.
 
 ## Webhooks
 
-Give Estene operations an HTTPS endpoint and pick your events. They'll share a **signing
-secret** (`whsec_…`) with you.
+Give Estene operations an HTTPS endpoint and choose the events you want. They'll share a **signing
+secret** (`whsec_…`) with you. Subscribe only to what you act on: many integrations just need
+`shipment.delivered`.
 
-| Event                  | When                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------- |
-| `order.created`        | An order was booked for your account (by API or by our staff on your behalf)                |
-| `order.status_changed` | Every milestone. `data.previousStatus` and `data.status` are included.                      |
-| `order.price_adjusted` | The rider changed the price at pickup. `data.previousAmount`, `data.amount`, `data.reason`. |
-| `ping`                 | Test event sent from our console                                                            |
+| Event                       | Title                   | When                                                                                  |
+| --------------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
+| `shipment.created`          | New booking             | A shipment was booked for your account (via the API, or by our staff on your behalf)  |
+| `shipment.cancelled`        | Cancelled               | The shipment was cancelled before pickup                                              |
+| `shipment.rider_assigned`   | Rider assigned          | A rider accepted the job                                                              |
+| `shipment.rider_unassigned` | Rider removed           | The rider was taken off the job; we're finding another                                |
+| `shipment.rider_en_route`   | Rider heading to pickup | The rider is on the way to collect                                                    |
+| `shipment.picked_up`        | Picked up               | Collected, QR-tagged, price confirmed                                                 |
+| `shipment.price_adjusted`   | Price changed at pickup | Size/weight differed from the booking. Includes `previousAmount`, `amount`, `reason`. |
+| `shipment.in_transit`       | In transit              | Moving between zones                                                                  |
+| `shipment.at_hub`           | At sorting hub          | Arrived at a hub for an inter-zone handover                                           |
+| `shipment.out_for_delivery` | Out for delivery        | On the way to the recipient                                                           |
+| `shipment.delivered`        | Delivered               | Handed over, with `shipment.proofOfDelivery` set                                      |
+| `shipment.delivery_failed`  | Delivery attempt failed | The rider couldn't hand it over; a re-attempt follows                                 |
+| `shipment.returned`         | Returned to sender      | Taken back to the pickup address                                                      |
+| `ping`                      | Test event              | Sent from our console to check your endpoint                                          |
+
+Status events also carry `data.previousStatus` and `data.status`.
 
 **Request we send:**
 
@@ -206,22 +219,32 @@ secret** (`whsec_…`) with you.
 POST /your/webhook HTTP/1.1
 Content-Type: application/json
 User-Agent: Estene-Webhooks/1.0
-Estene-Event: order.status_changed
+Estene-Event: shipment.out_for_delivery
 Estene-Delivery: evt_2k9x7q…           ← unique per event; use it to de-duplicate
 Estene-Signature: t=1791795444,v1=5f2c…
 
-{ "id": "evt_2k9x7q…", "type": "order.status_changed", "createdAt": "…",
-  "data": { "order": { …order object… }, "previousStatus": "picked_up", "status": "out_for_delivery" } }
+{
+  "id": "evt_2k9x7q…",
+  "type": "shipment.out_for_delivery",
+  "title": "Out for delivery",
+  "summary": "Shipment ESTFS7R5CYT0 (your ref SO-10023) is out for delivery to Ngozi Eze in Garki II.",
+  "createdAt": "2026-10-12T09:41:07.512Z",
+  "data": { "shipment": { …shipment object… }, "previousStatus": "picked_up", "status": "out_for_delivery" }
+}
 ```
+
+`title` and `summary` are plain English, ready to show to your own customers or post to a team
+channel. Branch your code on `type`, never on the text: we may improve the wording.
 
 **Respond with any 2xx within 10 seconds.** Do heavy work after responding. Redirects,
 timeouts and non-2xx responses are retried with exponential backoff for about an hour
 (8 attempts). After that the event is marked failed, and our team can resend it once
-your endpoint is fixed.
+your endpoint is fixed. We keep the full delivery log for 30 days.
 
 **Delivery guarantees.** At-least-once, so de-duplicate on `Estene-Delivery`. Events can
-arrive out of order. Each one carries the full current order, so compare
-`data.order.updatedAt` and keep the newest.
+arrive out of order. Each one carries the full current shipment, so compare
+`data.shipment.updatedAt` and keep the newest. Treat unknown event types gracefully;
+we may add more.
 
 ### Verifying signatures
 
@@ -287,8 +310,8 @@ immediately, so deploy the new one as soon as you receive it.
 ## Checklist before going live
 
 - [ ] Key stored server-side (env var / secret manager), never committed
-- [ ] Every create sends a unique `externalReference`; retries reuse it
+- [ ] Every create sends a unique `clientReference`; retries reuse it
 - [ ] Zones cached and refreshed daily; area names sent exactly as listed
 - [ ] Webhook verifies signature + timestamp, responds 2xx fast, de-duplicates on `Estene-Delivery`
-- [ ] Out-of-order events handled via `data.order.updatedAt`
+- [ ] Out-of-order events handled via `data.shipment.updatedAt`
 - [ ] Amounts treated as kobo integers

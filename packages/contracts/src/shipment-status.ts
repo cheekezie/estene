@@ -1,14 +1,14 @@
-import type { ActorType, OrderStatus } from './enums';
+import type { ActorType, ShipmentStatus } from './enums';
 
 /**
- * The order lifecycle as an explicit state machine. Every status change in the
+ * The shipment lifecycle as an explicit state machine. Every status change in the
  * system goes through `canTransition` — the API refuses anything not listed
- * here, so an order can never skip from `created` to `delivered`.
+ * here, so an shipment can never skip from `created` to `delivered`.
  */
 
-type Transition = { to: OrderStatus; by: readonly ActorType[] };
+type Transition = { to: ShipmentStatus; by: readonly ActorType[] };
 
-const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
+const TRANSITIONS: Record<ShipmentStatus, readonly Transition[]> = {
   created: [
     { to: 'assigned', by: ['admin', 'rider'] },
     { to: 'cancelled', by: ['admin', 'customer', 'client'] },
@@ -45,17 +45,20 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   cancelled: [],
 };
 
-export const canTransition = (from: OrderStatus, to: OrderStatus, actor: ActorType): boolean =>
-  TRANSITIONS[from].some((t) => t.to === to && t.by.includes(actor));
+export const canTransition = (
+  from: ShipmentStatus,
+  to: ShipmentStatus,
+  actor: ActorType,
+): boolean => TRANSITIONS[from].some((t) => t.to === to && t.by.includes(actor));
 
-export const nextStatuses = (from: OrderStatus, actor: ActorType): OrderStatus[] =>
+export const nextStatuses = (from: ShipmentStatus, actor: ActorType): ShipmentStatus[] =>
   TRANSITIONS[from].filter((t) => t.by.includes(actor)).map((t) => t.to);
 
-export const TERMINAL_STATUSES: readonly OrderStatus[] = ['delivered', 'returned', 'cancelled'];
-export const isTerminal = (s: OrderStatus) => TERMINAL_STATUSES.includes(s);
+export const TERMINAL_STATUSES: readonly ShipmentStatus[] = ['delivered', 'returned', 'cancelled'];
+export const isTerminal = (s: ShipmentStatus) => TERMINAL_STATUSES.includes(s);
 
 /** Statuses where a rider is actively holding or heading to the parcel. */
-export const ACTIVE_RIDER_STATUSES: readonly OrderStatus[] = [
+export const ACTIVE_RIDER_STATUSES: readonly ShipmentStatus[] = [
   'assigned',
   'en_route_to_pickup',
   'picked_up',
@@ -69,8 +72,8 @@ export type StatusTone = 'neutral' | 'info' | 'progress' | 'warning' | 'success'
  * Customer-facing copy per milestone. `notify` marks the milestones that
  * trigger a sender notification; `notifyReceiver` the ones the recipient hears about.
  */
-export const ORDER_STATUS_META: Record<
-  OrderStatus,
+export const SHIPMENT_STATUS_META: Record<
+  ShipmentStatus,
   { label: string; description: string; tone: StatusTone; notify: boolean; notifyReceiver: boolean }
 > = {
   created: {
@@ -153,7 +156,7 @@ export const ORDER_STATUS_META: Record<
 };
 
 /** The happy-path milestones shown as a progress tracker on the public site. */
-export const TRACKING_MILESTONES: readonly OrderStatus[] = [
+export const TRACKING_MILESTONES: readonly ShipmentStatus[] = [
   'created',
   'assigned',
   'picked_up',

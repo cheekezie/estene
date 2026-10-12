@@ -5,6 +5,12 @@ import {
   type ClientStatus,
   type WebhookEvent,
 } from '@estene/contracts/enums';
+import {
+  CLIENT_INDUSTRIES,
+  MONTHLY_VOLUMES,
+  type ClientIndustry,
+  type MonthlyVolume,
+} from '@estene/contracts/client';
 
 /**
  * API keys are stored as SHA-256 hashes; the plaintext is shown once at
@@ -24,9 +30,22 @@ export interface IApiKey {
 export interface IClient {
   _id: Types.ObjectId;
   name: string;
-  contactName: string;
-  email: string;
-  phone: string;
+  legalName?: string;
+  industry: ClientIndustry;
+  rcNumber?: string;
+  website?: string;
+  contact: { name: string; role?: string; phone: string; email: string };
+  address: {
+    line: string;
+    zone?: Types.ObjectId;
+    area?: string;
+    landmark?: string;
+    city: string;
+    state: string;
+  };
+  billing: { email?: string; paymentTermsDays: number; creditLimit?: number };
+  expectedMonthlyVolume?: MonthlyVolume;
+  accountManager?: Types.ObjectId;
   notes?: string;
   status: ClientStatus;
   apiKeys: Types.DocumentArray<IApiKey>;
@@ -48,9 +67,31 @@ const apiKeySchema = new Schema<IApiKey>({
 const clientSchema = new Schema<IClient>(
   {
     name: { type: String, required: true, trim: true },
-    contactName: { type: String, required: true, trim: true },
-    email: { type: String, required: true, lowercase: true, trim: true },
-    phone: { type: String, required: true },
+    legalName: String,
+    industry: { type: String, enum: CLIENT_INDUSTRIES, required: true, index: true },
+    rcNumber: String,
+    website: String,
+    contact: {
+      name: { type: String, required: true },
+      role: String,
+      phone: { type: String, required: true },
+      email: { type: String, required: true, lowercase: true },
+    },
+    address: {
+      line: { type: String, required: true },
+      zone: { type: Schema.Types.ObjectId, ref: 'Zone' },
+      area: String,
+      landmark: String,
+      city: { type: String, default: 'Abuja' },
+      state: { type: String, default: 'FCT' },
+    },
+    billing: {
+      email: String,
+      paymentTermsDays: { type: Number, default: 0 },
+      creditLimit: Number,
+    },
+    expectedMonthlyVolume: { type: String, enum: MONTHLY_VOLUMES },
+    accountManager: { type: Schema.Types.ObjectId, ref: 'Admin' },
     notes: String,
     status: { type: String, enum: CLIENT_STATUSES, default: 'active', index: true },
     apiKeys: { type: [apiKeySchema], default: [] },

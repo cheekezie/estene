@@ -2,16 +2,16 @@ import { Schema, model, type HydratedDocument, type Types } from 'mongoose';
 import {
   ACTOR_TYPES,
   DELIVERY_PROOF_METHODS,
-  ORDER_SOURCES,
-  ORDER_STATUSES,
+  SHIPMENT_SOURCES,
+  SHIPMENT_STATUSES,
   PARCEL_SIZES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
   SERVICE_LEVELS,
   type ActorType,
   type DeliveryProofMethod,
-  type OrderSource,
-  type OrderStatus,
+  type ShipmentSource,
+  type ShipmentStatus,
   type ParcelSize,
   type PaymentMethod,
   type PaymentStatus,
@@ -31,8 +31,8 @@ export interface IStop {
   location?: GeoJSONPoint;
 }
 
-export interface IOrderEvent {
-  status: OrderStatus;
+export interface IShipmentEvent {
+  status: ShipmentStatus;
   note?: string;
   actorType: ActorType | 'system';
   actorId?: Types.ObjectId;
@@ -41,15 +41,15 @@ export interface IOrderEvent {
 
 export type DispatchState = 'searching' | 'offered' | 'unassigned' | 'assigned';
 
-export interface IOrder {
+export interface IShipment {
   _id: Types.ObjectId;
   trackingNumber: string;
-  status: OrderStatus;
-  source: OrderSource;
-  /** Business client the order belongs to (phone booking on their behalf, or via the API). */
+  status: ShipmentStatus;
+  source: ShipmentSource;
+  /** Business client the shipment belongs to (phone booking on their behalf, or via the API). */
   client?: Types.ObjectId | null;
-  /** The client's own order id; unique per client, used for idempotent API creates. */
-  externalReference?: string;
+  /** The client's own shipment id; unique per client, used for idempotent API creates. */
+  clientReference?: string;
   pickup: IStop;
   dropoff: IStop;
   parcel: {
@@ -81,7 +81,7 @@ export interface IOrder {
   dispatch: { state: DispatchState; attempts: number; declinedBy: Types.ObjectId[] };
   senderEmail?: string;
   notes?: string;
-  events: IOrderEvent[];
+  events: IShipmentEvent[];
   deliveredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -103,13 +103,13 @@ const stopSchema = new Schema<IStop>(
   { _id: false },
 );
 
-const orderSchema = new Schema<IOrder>(
+const shipmentSchema = new Schema<IShipment>(
   {
     trackingNumber: { type: String, required: true, unique: true },
-    status: { type: String, enum: ORDER_STATUSES, default: 'created' },
-    source: { type: String, enum: ORDER_SOURCES, required: true, default: 'web' },
+    status: { type: String, enum: SHIPMENT_STATUSES, default: 'created' },
+    source: { type: String, enum: SHIPMENT_SOURCES, required: true, default: 'web' },
     client: { type: Schema.Types.ObjectId, ref: 'Client', default: null },
-    externalReference: String,
+    clientReference: String,
     pickup: { type: stopSchema, required: true },
     dropoff: { type: stopSchema, required: true },
     parcel: {
@@ -156,7 +156,7 @@ const orderSchema = new Schema<IOrder>(
     events: [
       {
         _id: false,
-        status: { type: String, enum: ORDER_STATUSES, required: true },
+        status: { type: String, enum: SHIPMENT_STATUSES, required: true },
         note: String,
         actorType: { type: String, enum: [...ACTOR_TYPES, 'system'], required: true },
         actorId: Schema.Types.ObjectId,
@@ -168,20 +168,20 @@ const orderSchema = new Schema<IOrder>(
   { timestamps: true },
 );
 
-orderSchema.index({ status: 1, createdAt: -1 });
-orderSchema.index({ rider: 1, status: 1 });
-orderSchema.index({ 'pickup.zone': 1, status: 1 });
-orderSchema.index({ 'pickup.phone': 1, createdAt: -1 });
-orderSchema.index({ client: 1, createdAt: -1 });
-orderSchema.index(
-  { client: 1, externalReference: 1 },
-  { unique: true, partialFilterExpression: { externalReference: { $type: 'string' } } },
+shipmentSchema.index({ status: 1, createdAt: -1 });
+shipmentSchema.index({ rider: 1, status: 1 });
+shipmentSchema.index({ 'pickup.zone': 1, status: 1 });
+shipmentSchema.index({ 'pickup.phone': 1, createdAt: -1 });
+shipmentSchema.index({ client: 1, createdAt: -1 });
+shipmentSchema.index(
+  { client: 1, clientReference: 1 },
+  { unique: true, partialFilterExpression: { clientReference: { $type: 'string' } } },
 );
-orderSchema.index(
+shipmentSchema.index(
   { tagCode: 1 },
   { unique: true, partialFilterExpression: { tagCode: { $type: 'string' } } },
 );
 
-export const OrderModel = model<IOrder>('Order', orderSchema);
+export const ShipmentModel = model<IShipment>('Shipment', shipmentSchema);
 
-export type OrderDoc = HydratedDocument<IOrder>;
+export type ShipmentDoc = HydratedDocument<IShipment>;

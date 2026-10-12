@@ -11,7 +11,7 @@ import { clientsRoutes } from './modules/clients/clients.routes';
 import { integrationRoutes } from './modules/integration/integration.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { financeRoutes } from './modules/finance/finance.routes';
-import { ordersRoutes } from './modules/orders/orders.routes';
+import { shipmentsRoutes } from './modules/shipments/shipments.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
 import { publicRoutes } from './modules/public/public.routes';
 import { riderAppRoutes } from './modules/rider-app/rider-app.routes';
@@ -56,24 +56,20 @@ export async function buildApp() {
         });
       }
       if (error.statusCode === 429) {
-        return reply
-          .status(429)
-          .send({
-            success: false,
-            statusCode: 429,
-            code: 'RATE_LIMITED',
-            message: 'Too many requests — slow down and try again shortly',
-          });
+        return reply.status(429).send({
+          success: false,
+          statusCode: 429,
+          code: 'RATE_LIMITED',
+          message: 'Too many requests — slow down and try again shortly',
+        });
       }
       if (error.name === 'CastError') {
-        return reply
-          .status(400)
-          .send({
-            success: false,
-            statusCode: 400,
-            code: 'INVALID_ID',
-            message: 'Invalid identifier',
-          });
+        return reply.status(400).send({
+          success: false,
+          statusCode: 400,
+          code: 'INVALID_ID',
+          message: 'Invalid identifier',
+        });
       }
       if (error.statusCode && error.statusCode < 500) {
         return reply
@@ -81,14 +77,12 @@ export async function buildApp() {
           .send({ success: false, statusCode: error.statusCode, message: error.message });
       }
       req.log.error(error);
-      return reply
-        .status(500)
-        .send({
-          success: false,
-          statusCode: 500,
-          code: 'INTERNAL_ERROR',
-          message: 'Something went wrong',
-        });
+      return reply.status(500).send({
+        success: false,
+        statusCode: 500,
+        code: 'INTERNAL_ERROR',
+        message: 'Something went wrong',
+      });
     },
   );
 
@@ -109,7 +103,7 @@ export async function buildApp() {
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
   await app.register(integrationRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
-  await app.register(ordersRoutes, { prefix: '/api/orders' });
+  await app.register(shipmentsRoutes, { prefix: '/api/shipments' });
   await app.register(ridersRoutes, { prefix: '/api/riders' });
   await app.register(zonesRoutes, { prefix: '/api/zones' });
   await app.register(pricingRoutes, { prefix: '/api/pricing' });

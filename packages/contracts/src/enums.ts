@@ -3,7 +3,7 @@
  * schemas, Mongoose enums and UI option lists without drifting.
  */
 
-export const ORDER_STATUSES = [
+export const SHIPMENT_STATUSES = [
   'created', // booked, waiting for a rider
   'assigned', // a rider accepted the job
   'en_route_to_pickup',
@@ -16,7 +16,7 @@ export const ORDER_STATUSES = [
   'returned',
   'cancelled',
 ] as const;
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 export const PARCEL_SIZES = ['envelope', 'small', 'medium', 'large', 'xlarge'] as const;
 export type ParcelSize = (typeof PARCEL_SIZES)[number];
@@ -67,18 +67,32 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   on_account: 'On account (invoiced)',
 };
 
-/** Where an order came from. */
-export const ORDER_SOURCES = ['web', 'admin', 'api'] as const;
-export type OrderSource = (typeof ORDER_SOURCES)[number];
+/** Where an shipment came from. */
+export const SHIPMENT_SOURCES = ['web', 'admin', 'api'] as const;
+export type ShipmentSource = (typeof SHIPMENT_SOURCES)[number];
 
 export const CLIENT_STATUSES = ['active', 'suspended'] as const;
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];
 
-/** Webhook event types a business client can subscribe to. */
+/**
+ * Webhook events a business client can subscribe to — one per milestone, so an
+ * integrator can listen for just `shipment.delivered` if that's all they need.
+ * Machine names never change once published; titles are for humans.
+ */
 export const WEBHOOK_EVENTS = [
-  'order.created',
-  'order.status_changed',
-  'order.price_adjusted',
+  'shipment.created',
+  'shipment.rider_assigned',
+  'shipment.rider_unassigned',
+  'shipment.rider_en_route',
+  'shipment.picked_up',
+  'shipment.price_adjusted',
+  'shipment.in_transit',
+  'shipment.at_hub',
+  'shipment.out_for_delivery',
+  'shipment.delivered',
+  'shipment.delivery_failed',
+  'shipment.returned',
+  'shipment.cancelled',
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
@@ -113,7 +127,7 @@ export const DELIVERY_PROOF_METHODS = ['pin', 'photo'] as const;
 export type DeliveryProofMethod = (typeof DELIVERY_PROOF_METHODS)[number];
 
 export const LEDGER_ENTRY_TYPES = [
-  'order_charge', // what the customer owes for an order
+  'shipment_charge', // what the customer owes for an shipment
   'payment_received', // customer paid (card/transfer/cash)
   'rider_earning', // partner rider's share of a trip
   'platform_revenue', // our income: full fare on company-rider trips, commission on partner trips

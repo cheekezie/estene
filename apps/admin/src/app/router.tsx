@@ -20,11 +20,26 @@ const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, ...page(() => import('@/features/dashboard/DashboardPage')) },
-          { path: 'orders', ...page(() => import('@/features/orders/OrdersPage')) },
-          { path: 'orders/new', ...page(() => import('@/features/orders/NewOrderPage')) },
-          { path: 'orders/:id', ...page(() => import('@/features/orders/OrderDetailPage')) },
+          { path: 'shipments', ...page(() => import('@/features/shipments/ShipmentsPage')) },
+          { path: 'shipments/new', ...page(() => import('@/features/shipments/NewShipmentPage')) },
+          {
+            path: 'shipments/:id',
+            ...page(() => import('@/features/shipments/ShipmentDetailPage')),
+          },
           { path: 'clients', ...page(() => import('@/features/clients/ClientsPage')) },
-          { path: 'clients/:id', ...page(() => import('@/features/clients/ClientDetailPage')) },
+          { path: 'clients/new', ...page(() => import('@/features/clients/ClientFormPage')) },
+          { path: 'clients/:id/edit', ...page(() => import('@/features/clients/ClientFormPage')) },
+          {
+            path: 'clients/:id',
+            ...page(() => import('@/features/clients/ClientLayout')),
+            children: [
+              { index: true, ...page(() => import('@/features/clients/ClientOverviewPage')) },
+              {
+                path: 'developer',
+                ...page(() => import('@/features/clients/ClientDeveloperPage')),
+              },
+            ],
+          },
           { path: 'riders', ...page(() => import('@/features/riders/RidersPage')) },
           { path: 'riders/:id', ...page(() => import('@/features/riders/RiderDetailPage')) },
           { path: 'zones', ...page(() => import('@/features/zones/ZonesPage')) },

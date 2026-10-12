@@ -5,8 +5,8 @@ import { ObjectIdSchema, PaginationQuerySchema } from '@estene/contracts/common'
 import { randomToken } from '../../lib/crypto';
 import { badRequest } from '../../lib/errors';
 import { paginate } from '../../lib/response';
-import { OrderModel } from '../orders/models/order.model';
-import { payableAmount } from '../orders/orders.mapper';
+import { ShipmentModel } from '../shipments/models/shipment.model';
+import { payableAmount } from '../shipments/shipments.mapper';
 import { PricingService } from '../pricing/pricing.service';
 import { RiderModel } from '../riders/models/rider.model';
 import { LedgerEntryModel, type ILedgerEntry } from './models/ledger-entry.model';
@@ -52,19 +52,19 @@ const dateRange = (from?: Date, to?: Date) =>
   from || to ? { createdAt: { ...(from && { $gte: from }), ...(to && { $lte: to }) } } : {};
 
 export const FinanceService = {
-  /** Staff marked a non-cash order paid (transfer received, client invoice settled). */
-  async recordPaymentReceived(orderId: string) {
-    const order = await OrderModel.findById(orderId).lean();
-    if (!order) return;
+  /** Staff marked a non-cash shipment paid (transfer received, client invoice settled). */
+  async recordPaymentReceived(shipmentId: string) {
+    const shipment = await ShipmentModel.findById(shipmentId).lean();
+    if (!shipment) return;
     await post([
       {
         type: 'payment_received',
-        amount: payableAmount(order),
+        amount: payableAmount(shipment),
         account: 'customer',
-        order: order._id,
-        client: order.client ?? undefined,
-        reference: order.paymentMethod,
-        idempotencyKey: `${orderId}:payment_received`,
+        shipment: shipment._id,
+        client: shipment.client ?? undefined,
+        reference: shipment.paymentMethod,
+        idempotencyKey: `${shipmentId}:payment_received`,
       },
     ]);
   },
@@ -75,60 +75,60 @@ export const FinanceService = {
       {
         $match: {
           client: new Types.ObjectId(clientId),
-          type: { $in: ['order_charge', 'payment_received'] },
+          type: { $in: ['shipment_charge', 'payment_received'] },
         },
       },
       { $group: { _id: '$type', total: { $sum: '$amount' } } },
     ]);
     const t = Object.fromEntries(rows.map((r) => [r._id, r.total]));
-    return (t.order_charge ?? 0) - (t.payment_received ?? 0);
+    return (t.shipment_charge ?? 0) - (t.payment_received ?? 0);
   },
 
   /** Rider took cash from the customer — the rider now owes it to us. */
-  async recordCashCollected(orderId: string) {
-    const order = await OrderModel.findById(orderId).lean();
-    if (!order?.rider) return;
-    const amount = payableAmount(order);
+  async recordCashCollected(shipmentId: string) {
+    const shipment = await ShipmentModel.findById(shipmentId).lean();
+    if (!shipment?.rider) return;
+    const amount = payableAmount(shipment);
     await post([
       {
         type: 'cash_collected',
         amount,
         account: 'rider',
-        rider: order.rider,
-        order: order._id,
-        idempotencyKey: `${orderId}:cash_collected`,
+        rider: shipment.rider,
+        shipment: shipment._id,
+        idempotencyKey: `${shipmentId}:cash_collected`,
       },
       {
         type: 'payment_received',
         amount,
         account: 'customer',
-        order: order._id,
-        idempotencyKey: `${orderId}:payment_received`,
+        shipment: shipment._id,
+        idempotencyKey: `${shipmentId}:payment_received`,
         reference: 'cash',
       },
     ]);
   },
 
   /**
-   * Books a delivered order. Company riders are salaried, so the whole fare is
+   * Books a delivered shipment. Company riders are salaried, so the whole fare is
    * platform revenue; partner riders keep the fare minus our commission.
    */
-  async recordDelivery(orderId: string) {
-    const order = await OrderModel.findById(orderId).lean();
-    if (!order?.rider) return;
-    const rider = await RiderModel.findById(order.rider, 'type commissionPct').lean();
+  async recordDelivery(shipmentId: string) {
+    const shipment = await ShipmentModel.findById(shipmentId).lean();
+    if (!shipment?.rider) return;
+    const rider = await RiderModel.findById(shipment.rider, 'type commissionPct').lean();
     if (!rider) return;
 
-    const amount = payableAmount(order);
-    const base = { order: order._id };
+    const amount = payableAmount(shipment);
+    const base = { shipment: shipment._id };
     const entries: NewEntry[] = [
       {
         ...base,
-        type: 'order_charge',
+        type: 'shipment_charge',
         amount,
         account: 'customer',
-        client: order.client ?? undefined,
-        idempotencyKey: `${orderId}:order_charge`,
+        client: shipment.client ?? undefined,
+        idempotencyKey: `${shipmentId}:shipment_charge`,
       },
     ];
 
@@ -142,7 +142,7 @@ export const FinanceService = {
           amount: commission,
           account: 'platform',
           rider: rider._id,
-          idempotencyKey: `${orderId}:platform_revenue`,
+          idempotencyKey: `${shipmentId}:platform_revenue`,
           note: `${pct}% commission`,
         },
         {
@@ -151,7 +151,7 @@ export const FinanceService = {
           amount: amount - commission,
           account: 'rider',
           rider: rider._id,
-          idempotencyKey: `${orderId}:rider_earning`,
+          idempotencyKey: `${shipmentId}:rider_earning`,
         },
       );
     } else {
@@ -161,7 +161,7 @@ export const FinanceService = {
         amount,
         account: 'platform',
         rider: rider._id,
-        idempotencyKey: `${orderId}:platform_revenue`,
+        idempotencyKey: `${shipmentId}:platform_revenue`,
       });
     }
     await post(entries);
@@ -213,12 +213,12 @@ export const FinanceService = {
       Record<LedgerEntryType, number>
     >;
     return {
-      grossBookings: t.order_charge ?? 0,
+      grossBookings: t.shipment_charge ?? 0,
       platformRevenue: t.platform_revenue ?? 0,
       riderEarnings: t.rider_earning ?? 0,
       payouts: t.payout ?? 0,
       cashOutstanding: (t.cash_collected ?? 0) - (t.cash_remitted ?? 0),
-      deliveredOrders: rows.find((r) => r._id === 'order_charge')?.count ?? 0,
+      deliveredShipments: rows.find((r) => r._id === 'shipment_charge')?.count ?? 0,
     };
   },
 
@@ -229,7 +229,7 @@ export const FinanceService = {
     const [items, total] = await Promise.all([
       LedgerEntryModel.find(filter)
         .populate('rider', 'firstName lastName code')
-        .populate('order', 'trackingNumber')
+        .populate('shipment', 'trackingNumber')
         .sort({ createdAt: -1 })
         .skip((q.page - 1) * q.limit)
         .limit(q.limit)

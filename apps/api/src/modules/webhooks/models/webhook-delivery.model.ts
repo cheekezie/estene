@@ -10,7 +10,9 @@ export interface IWebhookDelivery {
   client: Types.ObjectId;
   eventId: string;
   type: string;
-  order?: Types.ObjectId;
+  title: string;
+  summary: string;
+  shipment?: Types.ObjectId;
   trackingNumber?: string;
   url: string;
   body: string;
@@ -18,6 +20,10 @@ export interface IWebhookDelivery {
   attempts: number;
   lastStatusCode?: number;
   lastError?: string;
+  /** First 1 KB of the endpoint's reply — enough to debug, never their whole page. */
+  lastResponseBody?: string;
+  lastDurationMs?: number;
+  lastAttemptAt?: Date;
   deliveredAt?: Date;
   createdAt: Date;
 }
@@ -27,7 +33,9 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     eventId: { type: String, required: true, unique: true },
     type: { type: String, required: true },
-    order: { type: Schema.Types.ObjectId, ref: 'Order' },
+    title: { type: String, required: true },
+    summary: { type: String, required: true },
+    shipment: { type: Schema.Types.ObjectId, ref: 'Shipment' },
     trackingNumber: String,
     url: { type: String, required: true },
     body: { type: String, required: true },
@@ -35,12 +43,16 @@ const webhookDeliverySchema = new Schema<IWebhookDelivery>(
     attempts: { type: Number, default: 0 },
     lastStatusCode: Number,
     lastError: String,
+    lastResponseBody: String,
+    lastDurationMs: Number,
+    lastAttemptAt: Date,
     deliveredAt: Date,
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
 webhookDeliverySchema.index({ client: 1, createdAt: -1 });
+webhookDeliverySchema.index({ client: 1, status: 1, createdAt: -1 });
 webhookDeliverySchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
 
 export const WebhookDeliveryModel = model<IWebhookDelivery>(

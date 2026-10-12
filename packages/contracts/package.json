@@ -10,15 +10,16 @@
   },
   "exports": {
     "./enums": "./src/enums.ts",
-    "./order-status": "./src/order-status.ts",
     "./pricing": "./src/pricing.ts",
     "./money": "./src/money.ts",
     "./common": "./src/common.ts",
     "./auth": "./src/auth.ts",
     "./zone": "./src/zone.ts",
-    "./order": "./src/order.ts",
     "./rider": "./src/rider.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./shipment": "./src/shipment.ts",
+    "./shipment-status": "./src/shipment-status.ts",
+    "./webhook-events": "./src/webhook-events.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"

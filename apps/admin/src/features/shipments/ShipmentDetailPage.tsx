@@ -8,33 +8,33 @@ import {
   SERVICE_LEVEL_META,
 } from '@estene/contracts/enums';
 import { formatNaira } from '@estene/contracts/money';
-import { isTerminal } from '@estene/contracts/order-status';
-import type { StopDto } from '@estene/contracts/order';
+import { isTerminal } from '@estene/contracts/shipment-status';
+import type { StopDto } from '@estene/contracts/shipment';
 import { formatDateTime } from '@estene/lib/date';
 import { formatPhone, humanize } from '@estene/lib/utils';
 import { Badge } from '@estene/ui/badge';
 import { Button } from '@estene/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@estene/ui/card';
-import { OrderStatusBadge } from '@estene/ui/OrderStatusBadge';
+import { ShipmentStatusBadge } from '@estene/ui/ShipmentStatusBadge';
 import { QueryState } from '@/shared/components/QueryState';
 import { ReasonDialog } from '@/shared/components/ReasonDialog';
 import { useCan } from '@/shared/hooks/useCan';
 import { AssignRiderDialog } from './components/AssignRiderDialog';
-import { OrderTimeline } from './components/OrderTimeline';
-import { useCancelOrder, useMarkPaid, useOrder, useUnassignRider } from './orders.queries';
+import { ShipmentTimeline } from './components/ShipmentTimeline';
+import { useCancelShipment, useMarkPaid, useShipment, useUnassignRider } from './shipments.queries';
 
 /** Cash is marked paid automatically when the rider collects it. */
 const CASH_METHODS: string[] = ['cash_on_pickup', 'cash_on_delivery'];
 
 const SOURCE_LABEL = { web: 'website', admin: 'phone booking', api: 'API' } as const;
 
-export default function OrderDetailPage() {
+export default function ShipmentDetailPage() {
   const { id = '' } = useParams();
-  const q = useOrder(id);
+  const q = useShipment(id);
   const can = useCan();
   const [assignOpen, setAssignOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const cancel = useCancelOrder(id);
+  const cancel = useCancelShipment(id);
   const unassign = useUnassignRider(id);
   const markPaid = useMarkPaid(id);
   const o = q.data;
@@ -42,10 +42,10 @@ export default function OrderDetailPage() {
   return (
     <>
       <Link
-        to="/orders"
+        to="/shipments"
         className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1.5 text-sm"
       >
-        <ArrowLeft className="size-4" /> Orders
+        <ArrowLeft className="size-4" /> Shipments
       </Link>
       <QueryState isLoading={q.isLoading} error={q.error} onRetry={q.refetch}>
         {o && (
@@ -56,7 +56,7 @@ export default function OrderDetailPage() {
                   <h1 className="font-mono text-2xl font-bold tracking-tight">
                     {o.trackingNumber}
                   </h1>
-                  <OrderStatusBadge status={o.status} />
+                  <ShipmentStatusBadge status={o.status} />
                 </div>
                 <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 text-sm">
                   <span>
@@ -70,9 +70,9 @@ export default function OrderDetailPage() {
                     >
                       <Building2 className="size-3.5" />
                       {o.client.name}
-                      {o.externalReference && (
+                      {o.clientReference && (
                         <span className="text-muted-foreground font-mono font-normal">
-                          #{o.externalReference}
+                          #{o.clientReference}
                         </span>
                       )}
                     </Link>
@@ -103,7 +103,7 @@ export default function OrderDetailPage() {
                       className="text-destructive"
                       onClick={() => setCancelOpen(true)}
                     >
-                      Cancel order
+                      Cancel shipment
                     </Button>
                   )}
                 </div>
@@ -249,14 +249,14 @@ export default function OrderDetailPage() {
                     <CardTitle>Timeline</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <OrderTimeline events={o.events} />
+                    <ShipmentTimeline events={o.events} />
                   </CardContent>
                 </Card>
               </div>
             </div>
 
             <AssignRiderDialog
-              orderId={o.id}
+              shipmentId={o.id}
               zoneId={o.pickup.zone.id}
               open={assignOpen}
               onOpenChange={setAssignOpen}
@@ -264,14 +264,14 @@ export default function OrderDetailPage() {
             <ReasonDialog
               open={cancelOpen}
               onOpenChange={setCancelOpen}
-              title="Cancel this order?"
+              title="Cancel this shipment?"
               description="The sender is notified by SMS. This cannot be undone."
-              confirmLabel="Cancel order"
+              confirmLabel="Cancel shipment"
               loading={cancel.isPending}
               onConfirm={(reason) =>
                 cancel.mutate(reason, {
                   onSuccess: () => {
-                    toast.success('Order cancelled');
+                    toast.success('Shipment cancelled');
                     setCancelOpen(false);
                   },
                 })

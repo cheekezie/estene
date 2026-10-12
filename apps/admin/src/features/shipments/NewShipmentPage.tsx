@@ -15,7 +15,7 @@ import {
   type PaymentMethod,
 } from '@estene/contracts/enums';
 import { formatNaira, nairaToKobo } from '@estene/contracts/money';
-import { AdminCreateOrderSchema, type OrderDto } from '@estene/contracts/order';
+import { AdminCreateShipmentSchema, type ShipmentDto } from '@estene/contracts/shipment';
 import type { ZoneDto } from '@estene/contracts/zone';
 import type { QuoteLine } from '@estene/contracts/pricing';
 import { NigerianPhoneSchema } from '@estene/contracts/common';
@@ -33,8 +33,8 @@ import { useClientOptions } from '../clients/clients.queries';
 import { useZones } from '../zones/zones.queries';
 import { AreaSelect } from './components/AreaSelect';
 
-type FormIn = z.input<typeof AdminCreateOrderSchema>;
-type FormOut = z.output<typeof AdminCreateOrderSchema>;
+type FormIn = z.input<typeof AdminCreateShipmentSchema>;
+type FormOut = z.output<typeof AdminCreateShipmentSchema>;
 type Form = UseFormReturn<FormIn, unknown, FormOut>;
 
 /** Staff can't take card payments over the phone; businesses can also be invoiced. */
@@ -52,7 +52,7 @@ type SenderLookup = {
   senderEmail?: string;
 } | null;
 
-export default function NewOrderPage() {
+export default function NewShipmentPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const presetClient = params.get('clientId') ?? undefined;
@@ -60,7 +60,7 @@ export default function NewOrderPage() {
   const clients = useClientOptions();
 
   const form: Form = useForm<FormIn, unknown, FormOut>({
-    resolver: zodResolver(AdminCreateOrderSchema),
+    resolver: zodResolver(AdminCreateShipmentSchema),
     defaultValues: {
       clientId: presetClient,
       serviceLevel: 'standard',
@@ -85,36 +85,42 @@ export default function NewOrderPage() {
       setValue('paymentMethod', paymentChoices[0]!);
   }, [clientId]);
 
-  // Pre-fill pickup contact from the business account.
+  // Booking for a business: pickup defaults to their address and contact (staff can still edit).
   const selectedClient = clients.data?.find((c) => c.id === clientId);
   useEffect(() => {
-    if (selectedClient && !form.getValues('pickup.phone')) {
-      setValue('pickup.contactName', selectedClient.name);
-      setValue('pickup.phone', selectedClient.phone);
+    if (!selectedClient) return;
+    const p = selectedClient.pickup;
+    setValue('pickup.contactName', `${selectedClient.name} (${p.contactName})`);
+    setValue('pickup.phone', p.phone);
+    setValue('pickup.address', p.address);
+    if (p.zoneId && p.area) {
+      setValue('pickup.zoneId', p.zoneId);
+      setValue('pickup.area', p.area);
     }
+    setValue('pickup.landmark', p.landmark);
   }, [selectedClient?.id]);
 
   const book = useMutation({
-    mutationFn: (body: FormOut) => api.post<OrderDto>('/orders', body),
-    onSuccess: (order) => {
-      toast.success(`Booked ${order.trackingNumber}`, {
+    mutationFn: (body: FormOut) => api.post<ShipmentDto>('/shipments', body),
+    onSuccess: (shipment) => {
+      toast.success(`Booked ${shipment.trackingNumber}`, {
         description:
           'Dispatch is finding a rider. The sender gets an SMS with the tracking number.',
       });
-      navigate(`/orders/${order.id}`);
+      navigate(`/shipments/${shipment.id}`);
     },
   });
 
   return (
     <>
       <Link
-        to="/orders"
+        to="/shipments"
         className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1.5 text-sm"
       >
-        <ArrowLeft className="size-4" /> Orders
+        <ArrowLeft className="size-4" /> Shipments
       </Link>
       <PageHeader
-        title="New order"
+        title="New shipment"
         description="Key in a booking taken over the phone or for a business client."
       />
 
@@ -269,7 +275,7 @@ export default function NewOrderPage() {
         <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <LiveQuote control={control} />
           <Button type="submit" size="lg" className="w-full" loading={book.isPending}>
-            Book order
+            Book shipment
           </Button>
           <FormErrorSummary errors={errors} />
         </aside>
@@ -309,7 +315,7 @@ function StopSection({
     if (!lookup || !phone.success || getValues('pickup.address')) return;
     setLooking(true);
     try {
-      const found = await api.get<SenderLookup>('/orders/lookup-sender', { phone: phone.data });
+      const found = await api.get<SenderLookup>('/shipments/lookup-sender', { phone: phone.data });
       if (!found) return;
       if (!getValues('pickup.contactName')) setValue('pickup.contactName', found.contactName);
       setValue('pickup.zoneId', found.zoneId);
@@ -410,8 +416,8 @@ function LiveQuote({ control }: { control: Form['control'] }) {
   const ready = !!input.pickupZoneId && !!input.dropoffZoneId && Number(input.weightKg) > 0;
 
   const q = useQuery({
-    queryKey: ['orders', 'quote', key],
-    queryFn: () => api.post<{ lines: QuoteLine[]; total: number }>('/orders/quote', input),
+    queryKey: ['shipments', 'quote', key],
+    queryFn: () => api.post<{ lines: QuoteLine[]; total: number }>('/shipments/quote', input),
     enabled: ready,
     staleTime: 60_000,
     retry: false,

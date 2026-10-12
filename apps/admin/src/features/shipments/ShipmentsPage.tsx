@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Building2, PackageSearch, Plus, Search } from 'lucide-react';
-import { ORDER_STATUSES, type OrderStatus } from '@estene/contracts/enums';
+import { SHIPMENT_STATUSES, type ShipmentStatus } from '@estene/contracts/enums';
 import { formatNaira } from '@estene/contracts/money';
-import { ORDER_STATUS_META } from '@estene/contracts/order-status';
+import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { formatRelativeDay } from '@estene/lib/date';
 import { Badge } from '@estene/ui/badge';
 import { Button } from '@estene/ui/button';
 import { Card } from '@estene/ui/card';
 import { EmptyState } from '@estene/ui/EmptyState';
 import { Input } from '@estene/ui/input';
-import { OrderStatusBadge } from '@estene/ui/OrderStatusBadge';
+import { ShipmentStatusBadge } from '@estene/ui/ShipmentStatusBadge';
 import { Select } from '@estene/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@estene/ui/table';
 import { useDebounce } from '@estene/ui/hooks/useDebounce';
@@ -19,14 +19,17 @@ import { Pagination } from '@/shared/components/Pagination';
 import { QueryState } from '@/shared/components/QueryState';
 import { useCan } from '@/shared/hooks/useCan';
 import { useClientOptions } from '../clients/clients.queries';
-import { useOrders } from './orders.queries';
+import { useShipments } from './shipments.queries';
 
-const STATUS_OPTIONS = ORDER_STATUSES.map((s) => ({ value: s, label: ORDER_STATUS_META[s].label }));
+const STATUS_OPTIONS = SHIPMENT_STATUSES.map((s) => ({
+  value: s,
+  label: SHIPMENT_STATUS_META[s].label,
+}));
 
-export default function OrdersPage() {
+export default function ShipmentsPage() {
   // Filters live in the URL so a filtered view can be shared or bookmarked.
   const [params, setParams] = useSearchParams();
-  const status = (params.get('status') as OrderStatus | null) ?? undefined;
+  const status = (params.get('status') as ShipmentStatus | null) ?? undefined;
   const page = Number(params.get('page') ?? 1);
   const clientId = params.get('clientId') ?? undefined;
   const can = useCan();
@@ -45,19 +48,19 @@ export default function OrdersPage() {
       update({ q: debounced || undefined, page: undefined });
   }, [debounced]);
 
-  const q = useOrders({ page, status, clientId, search: debounced || undefined });
+  const q = useShipments({ page, status, clientId, search: debounced || undefined });
 
   return (
     <>
       <PageHeader
-        title="Orders"
+        title="Shipments"
         description="Every booking across the network."
         actions={
           can('ops_manager', 'dispatcher', 'support') && (
             <Button asChild>
-              <Link to="/orders/new">
+              <Link to="/shipments/new">
                 <Plus />
-                New order
+                New shipment
               </Link>
             </Button>
           )
@@ -72,7 +75,7 @@ export default function OrdersPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tracking no., name, phone or tag"
               className="pl-9"
-              aria-label="Search orders"
+              aria-label="Search shipments"
             />
           </div>
           <Select
@@ -97,7 +100,7 @@ export default function OrdersPage() {
           {q.data && q.data.items.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
-              title="No orders found"
+              title="No shipments found"
               description="Try a different status or search term."
             />
           ) : (
@@ -120,7 +123,7 @@ export default function OrdersPage() {
                       <TR key={o.id} className="hover:bg-muted/50">
                         <TD>
                           <Link
-                            to={`/orders/${o.id}`}
+                            to={`/shipments/${o.id}`}
                             className="text-primary font-mono text-[13px] font-medium hover:underline"
                           >
                             {o.trackingNumber}
@@ -146,7 +149,7 @@ export default function OrdersPage() {
                           {o.rider?.name ?? <span className="text-muted-foreground">—</span>}
                         </TD>
                         <TD>
-                          <OrderStatusBadge status={o.status} />
+                          <ShipmentStatusBadge status={o.status} />
                         </TD>
                         <TD className="tabular text-right font-medium">
                           {formatNaira(o.finalAmount ?? o.estimate.total)}

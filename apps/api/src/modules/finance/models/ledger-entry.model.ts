@@ -13,8 +13,8 @@ export interface ILedgerEntry {
   amount: number;
   account: 'platform' | 'rider' | 'customer';
   rider?: Types.ObjectId;
-  order?: Types.ObjectId;
-  /** Business client billed for this entry (on-account orders). */
+  shipment?: Types.ObjectId;
+  /** Business client billed for this entry (on-account shipments). */
   client?: Types.ObjectId;
   idempotencyKey: string;
   reference?: string;
@@ -29,7 +29,7 @@ const ledgerEntrySchema = new Schema<ILedgerEntry>(
     amount: { type: Number, required: true, min: 0, validate: Number.isInteger },
     account: { type: String, enum: ['platform', 'rider', 'customer'], required: true },
     rider: { type: Schema.Types.ObjectId, ref: 'Rider' },
-    order: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
+    shipment: { type: Schema.Types.ObjectId, ref: 'Shipment', index: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client' },
     idempotencyKey: { type: String, required: true, unique: true },
     reference: String,

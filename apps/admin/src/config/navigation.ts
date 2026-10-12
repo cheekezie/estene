@@ -18,7 +18,7 @@ export const NAV_SECTIONS: { title?: string; items: NavItem[] }[] = [
   {
     items: [
       { label: 'Overview', to: '/', icon: LayoutDashboard },
-      { label: 'Orders', to: '/orders', icon: Package },
+      { label: 'Shipments', to: '/shipments', icon: Package },
     ],
   },
   {

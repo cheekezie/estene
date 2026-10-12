@@ -1,13 +1,13 @@
-import { ORDER_STATUS_META } from '@estene/contracts/order-status';
+import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { formatNaira } from '@estene/contracts/money';
-import type { OrderStatus } from '@estene/contracts/enums';
+import type { ShipmentStatus } from '@estene/contracts/enums';
 
 const TRACK_URL = 'estene.ng/track';
 
 /** SMS copy. Kept under 160 chars where possible — every extra segment costs money. */
 export const templates = {
-  senderStatus: (tn: string, status: OrderStatus) =>
-    `Estene: ${tn} — ${ORDER_STATUS_META[status].label}. ${ORDER_STATUS_META[status].description} Track: ${TRACK_URL}/${tn}`,
+  senderStatus: (tn: string, status: ShipmentStatus) =>
+    `Estene: ${tn} — ${SHIPMENT_STATUS_META[status].label}. ${SHIPMENT_STATUS_META[status].description} Track: ${TRACK_URL}/${tn}`,
 
   receiverPickedUp: (tn: string, senderName: string) =>
     `Estene: ${senderName} sent you a parcel (${tn}). We'll text you when it's out for delivery. Track: ${TRACK_URL}/${tn}`,
@@ -15,9 +15,11 @@ export const templates = {
   receiverOutForDelivery: (tn: string, pin: string) =>
     `Estene: your parcel ${tn} is out for delivery. Give the rider PIN ${pin} on arrival. Never share it before you receive the parcel.`,
 
-  receiverDelivered: (tn: string) => `Estene: parcel ${tn} has been delivered. Thank you for using Estene.`,
+  receiverDelivered: (tn: string) =>
+    `Estene: parcel ${tn} has been delivered. Thank you for using Estene.`,
 
-  receiverFailed: (tn: string) => `Estene: we couldn't deliver ${tn} today. Our rider will try again — reply or call us to reschedule.`,
+  receiverFailed: (tn: string) =>
+    `Estene: we couldn't deliver ${tn} today. Our rider will try again — reply or call us to reschedule.`,
 
   priceAdjusted: (tn: string, from: number, to: number, reason?: string) =>
     `Estene: the price for ${tn} changed from ${formatNaira(from)} to ${formatNaira(to)} after the rider checked your parcel${reason ? ` (${reason})` : ''}.`,

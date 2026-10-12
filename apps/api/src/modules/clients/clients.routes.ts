@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  WebhookDeliveryQuerySchema,
   ApiKeyCreateSchema,
   ClientInputSchema,
   ClientListQuerySchema,
@@ -11,6 +12,7 @@ import { CLIENT_STATUSES } from '@estene/contracts/enums';
 import { parse, send } from '../../lib/response';
 import { requireActor, requireRole } from '../../plugins/auth';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { AdminModel } from '../admins/models/admin.model';
 import { ClientsService } from './clients.service';
 
 const IdParams = z.object({ id: ObjectIdSchema });
@@ -26,6 +28,19 @@ export async function clientsRoutes(app: FastifyInstance) {
     send(reply, await ClientsService.list(parse(ClientListQuerySchema, req.query))),
   );
   app.get('/options', async (_req, reply) => send(reply, await ClientsService.options()));
+  /** Staff who can own a client relationship — for the account manager picker. */
+  app.get('/account-managers', async (_req, reply) => {
+    const staff = await AdminModel.find(
+      { isActive: true, role: { $in: ['super_admin', 'ops_manager', 'support', 'finance'] } },
+      'name role',
+    )
+      .sort({ name: 1 })
+      .lean();
+    return send(
+      reply,
+      staff.map((a) => ({ id: a._id.toString(), name: a.name, role: a.role })),
+    );
+  });
   app.get('/:id', async (req, reply) => send(reply, await ClientsService.get(id(req.params))));
 
   app.post('/', manage, async (req, reply) =>
@@ -101,9 +116,20 @@ export async function clientsRoutes(app: FastifyInstance) {
     send(reply, await WebhooksService.sendTest(id(req.params)), 202, 'Test event queued'),
   );
 
+  // Developer page: full delivery history, health, and one delivery's payload/response.
   app.get('/:id/webhook/deliveries', async (req, reply) =>
-    send(reply, await WebhooksService.list(id(req.params))),
+    send(
+      reply,
+      await WebhooksService.list(id(req.params), parse(WebhookDeliveryQuerySchema, req.query)),
+    ),
   );
+  app.get('/:id/webhook/stats', async (req, reply) =>
+    send(reply, await WebhooksService.stats(id(req.params))),
+  );
+  app.get('/:id/webhook/deliveries/:deliveryId', async (req, reply) => {
+    const { deliveryId } = parse(z.object({ deliveryId: ObjectIdSchema }), req.params);
+    return send(reply, await WebhooksService.get(id(req.params), deliveryId));
+  });
   app.post('/:id/webhook/deliveries/:deliveryId/resend', manage, async (req, reply) => {
     const { deliveryId } = parse(z.object({ deliveryId: ObjectIdSchema }), req.params);
     return send(

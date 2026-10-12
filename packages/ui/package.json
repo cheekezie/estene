@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Shared React primitives and brand components. No app state, no data fetching.",
-  "scripts": { "typecheck": "tsc --noEmit" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "exports": {
     "./button": "./src/ui/button.tsx",
     "./input": "./src/ui/input.tsx",
@@ -18,10 +20,10 @@
     "./table": "./src/ui/table.tsx",
     "./Field": "./src/components/Field.tsx",
     "./Logo": "./src/components/Logo.tsx",
-    "./OrderStatusBadge": "./src/components/OrderStatusBadge.tsx",
     "./EmptyState": "./src/components/EmptyState.tsx",
     "./Toaster": "./src/components/Toaster.tsx",
-    "./hooks/useDebounce": "./src/hooks/useDebounce.ts"
+    "./hooks/useDebounce": "./src/hooks/useDebounce.ts",
+    "./ShipmentStatusBadge": "./src/components/ShipmentStatusBadge.tsx"
   },
   "dependencies": {
     "@estene/contracts": "workspace:*",

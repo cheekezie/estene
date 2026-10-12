@@ -5,7 +5,7 @@ import {
   PricingConfigSchema,
   type RouteRateInput,
 } from '@estene/contracts/pricing';
-import type { QuoteRequest } from '@estene/contracts/order';
+import type { QuoteRequest } from '@estene/contracts/shipment';
 import { badRequest, notFound } from '../../lib/errors';
 import { ZoneModel } from '../zones/models/zone.model';
 import { PricingConfigModel, type IPricingConfig } from './models/pricing-config.model';
@@ -49,7 +49,10 @@ export const PricingService = {
       if (!zone) throw badRequest('We do not deliver to that area yet');
       return zone.intraZoneFare;
     }
-    const zones = await ZoneModel.countDocuments({ _id: { $in: [pickupZoneId, dropoffZoneId] }, isActive: true });
+    const zones = await ZoneModel.countDocuments({
+      _id: { $in: [pickupZoneId, dropoffZoneId] },
+      isActive: true,
+    });
     if (zones !== 2) throw badRequest('We do not deliver to that area yet');
 
     const rate = await RouteRateModel.findOne(orderedPair(pickupZoneId, dropoffZoneId)).lean();
@@ -66,7 +69,12 @@ export const PricingService = {
   },
 
   async listRouteRates() {
-    const rates = await RouteRateModel.find().populate<{ zoneA: { _id: string; name: string; code: string }; zoneB: { _id: string; name: string; code: string } }>('zoneA zoneB', 'name code').lean();
+    const rates = await RouteRateModel.find()
+      .populate<{
+        zoneA: { _id: string; name: string; code: string };
+        zoneB: { _id: string; name: string; code: string };
+      }>('zoneA zoneB', 'name code')
+      .lean();
     return rates.map((r) => ({
       id: r._id.toString(),
       zoneA: { id: r.zoneA._id.toString(), name: r.zoneA.name, code: r.zoneA.code },

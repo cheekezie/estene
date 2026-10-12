@@ -10,14 +10,14 @@ monorepo holds the API, every client, and the packages they share.
 | Public website | `@estene/web`         | Next.js 16 (App Router)            | 3100     |
 | Rider app      | `apps/rider` _(next)_ | Expo / React Native                | —        |
 
-| Package              | What lives there                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------- |
-| `@estene/contracts`  | Domain enums, order state machine, pricing formula, Zod request schemas — shared by API **and** clients |
-| `@estene/lib`        | Browser utilities (`cn`, dates, `ApiError`, query-client factory)                                       |
-| `@estene/api-client` | Axios client that unwraps the API envelope and handles token refresh                                    |
-| `@estene/ui`         | Shared React primitives + brand components (`Logo`, `OrderStatusBadge`)                                 |
-| `@estene/theme`      | Brand tokens (Estene Blue + Signal Amber) and base CSS                                                  |
-| `@estene/config`     | tsconfig bases                                                                                          |
+| Package              | What lives there                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `@estene/contracts`  | Domain enums, shipment state machine, pricing formula, Zod request schemas — shared by API **and** clients |
+| `@estene/lib`        | Browser utilities (`cn`, dates, `ApiError`, query-client factory)                                          |
+| `@estene/api-client` | Axios client that unwraps the API envelope and handles token refresh                                       |
+| `@estene/ui`         | Shared React primitives + brand components (`Logo`, `ShipmentStatusBadge`)                                 |
+| `@estene/theme`      | Brand tokens (Estene Blue + Signal Amber) and base CSS                                                     |
+| `@estene/config`     | tsconfig bases                                                                                             |
 
 ## Getting started
 

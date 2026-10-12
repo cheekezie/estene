@@ -2,7 +2,7 @@ import { Schema, model } from 'mongoose';
 import type { PricingConfig } from '@estene/contracts/pricing';
 
 /**
- * Singleton (key = "default"). Every save bumps `version`; orders store the
+ * Singleton (key = "default"). Every save bumps `version`; shipments store the
  * version they were priced with, so old quotes stay explainable after edits.
  */
 export interface IPricingConfig extends PricingConfig {

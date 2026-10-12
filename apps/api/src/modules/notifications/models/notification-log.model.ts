@@ -5,7 +5,7 @@ export interface INotificationLog {
   channel: 'sms' | 'email' | 'whatsapp' | 'push';
   to: string;
   template: string;
-  order?: Types.ObjectId;
+  shipment?: Types.ObjectId;
   status: 'sent' | 'failed';
   provider: string;
   error?: string;
@@ -17,7 +17,7 @@ const notificationLogSchema = new Schema<INotificationLog>(
     channel: { type: String, required: true },
     to: { type: String, required: true },
     template: { type: String, required: true },
-    order: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
+    shipment: { type: Schema.Types.ObjectId, ref: 'Shipment', index: true },
     status: { type: String, enum: ['sent', 'failed'], required: true },
     provider: { type: String, required: true },
     error: String,
@@ -28,4 +28,7 @@ const notificationLogSchema = new Schema<INotificationLog>(
 // Message bodies are deliberately not stored — they can contain delivery PINs.
 notificationLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 180 });
 
-export const NotificationLogModel = model<INotificationLog>('NotificationLog', notificationLogSchema);
+export const NotificationLogModel = model<INotificationLog>(
+  'NotificationLog',
+  notificationLogSchema,
+);

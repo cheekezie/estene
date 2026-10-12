@@ -26,12 +26,20 @@ export function ReasonDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent title={title} description={description}>
-        <Field label="Reason" hint="Saved on the order timeline.">
+        <Field label="Reason" hint="Saved on the shipment timeline.">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
         </Field>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Keep order</Button>
-          <Button variant="destructive" loading={loading} onClick={() => onConfirm(reason.trim() || undefined)}>{confirmLabel}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Keep shipment
+          </Button>
+          <Button
+            variant="destructive"
+            loading={loading}
+            onClick={() => onConfirm(reason.trim() || undefined)}
+          >
+            {confirmLabel}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

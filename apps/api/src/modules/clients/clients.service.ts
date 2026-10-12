@@ -1,13 +1,20 @@
-import type { ClientDto, ClientInput, WebhookConfigInput } from '@estene/contracts/client';
+import type { Types } from 'mongoose';
+import type {
+  ClientDto,
+  ClientIndustry,
+  ClientInput,
+  WebhookConfigInput,
+} from '@estene/contracts/client';
 import type { ClientStatus } from '@estene/contracts/enums';
-import { ACTIVE_RIDER_STATUSES } from '@estene/contracts/order-status';
+import { ACTIVE_RIDER_STATUSES } from '@estene/contracts/shipment-status';
 import { decrypt, encrypt, randomToken, sha256 } from '../../lib/crypto';
 import { searchRegex } from '../../lib/db';
 import { notFound } from '../../lib/errors';
 import { redis } from '../../lib/redis';
 import { paginate } from '../../lib/response';
 import { FinanceService } from '../finance/finance.service';
-import { OrderModel } from '../orders/models/order.model';
+import { ShipmentModel } from '../shipments/models/shipment.model';
+import { ZoneModel } from '../zones/models/zone.model';
 import { ClientModel, type IClient } from './models/client.model';
 
 const KEY_PREFIX = 'est_live_';
@@ -17,37 +24,94 @@ const keyCacheKey = (hash: string) => `apikey:${hash}`;
 
 export type ApiKeyPrincipal = { clientId: string; keyId: string; clientName: string };
 
-const toDto = (c: IClient): ClientDto => ({
-  id: c._id.toString(),
-  name: c.name,
-  contactName: c.contactName,
-  email: c.email,
-  phone: c.phone,
-  notes: c.notes,
-  status: c.status,
-  apiKeys: c.apiKeys
-    .map((k) => ({
-      id: k._id.toString(),
-      name: k.name,
-      preview: k.preview,
-      createdAt: k.createdAt.toISOString(),
-      lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
-      revokedAt: k.revokedAt?.toISOString() ?? null,
-    }))
-    .reverse(),
-  webhook: c.webhook
-    ? {
-        url: c.webhook.url,
-        events: c.webhook.events,
-        isActive: c.webhook.isActive,
-        hasSecret: !!c.webhook.secretCipher,
-      }
-    : null,
-  createdAt: c.createdAt.toISOString(),
-});
+type ZoneRef = { _id: Types.ObjectId; name: string; code: string };
+type AdminRef = { _id: Types.ObjectId; name: string };
+
+/** Clients are always loaded with these refs so the DTO can name the zone and account manager. */
+const CLIENT_POPULATE = [
+  { path: 'address.zone', select: 'name code' },
+  { path: 'accountManager', select: 'name' },
+];
+
+const toDto = (c: IClient): ClientDto => {
+  const zone = c.address.zone as unknown as ZoneRef | undefined;
+  const manager = c.accountManager as unknown as AdminRef | undefined;
+  return {
+    id: c._id.toString(),
+    name: c.name,
+    legalName: c.legalName,
+    industry: c.industry,
+    rcNumber: c.rcNumber,
+    website: c.website,
+    contact: {
+      name: c.contact.name,
+      role: c.contact.role,
+      phone: c.contact.phone,
+      email: c.contact.email,
+    },
+    address: {
+      line: c.address.line,
+      zoneId: zone?._id?.toString(),
+      area: c.address.area,
+      landmark: c.address.landmark,
+      city: c.address.city,
+      state: c.address.state,
+      zone:
+        zone && 'name' in zone
+          ? { id: zone._id.toString(), name: zone.name, code: zone.code }
+          : null,
+    },
+    billing: {
+      email: c.billing?.email,
+      paymentTermsDays: c.billing?.paymentTermsDays ?? 0,
+      creditLimit: c.billing?.creditLimit,
+    },
+    expectedMonthlyVolume: c.expectedMonthlyVolume,
+    accountManager:
+      manager && 'name' in manager ? { id: manager._id.toString(), name: manager.name } : null,
+    notes: c.notes,
+    status: c.status,
+    apiKeys: c.apiKeys
+      .map((k) => ({
+        id: k._id.toString(),
+        name: k.name,
+        preview: k.preview,
+        createdAt: k.createdAt.toISOString(),
+        lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+        revokedAt: k.revokedAt?.toISOString() ?? null,
+      }))
+      .reverse(),
+    webhook: c.webhook
+      ? {
+          url: c.webhook.url,
+          events: c.webhook.events,
+          isActive: c.webhook.isActive,
+          hasSecret: !!c.webhook.secretCipher,
+        }
+      : null,
+    createdAt: c.createdAt.toISOString(),
+  };
+};
+
+/** Contract shape → stored shape (ids become refs). */
+const toDoc = (input: Partial<ClientInput>) => {
+  const { accountManagerId, address, ...rest } = input;
+  return {
+    ...rest,
+    ...(accountManagerId !== undefined && { accountManager: accountManagerId }),
+    ...(address && { address: { ...address, zone: address.zoneId, zoneId: undefined } }),
+  };
+};
+
+/** Area names are unique across zones, so an address with only an area still gets its zone. */
+async function withResolvedZone<T extends Partial<ClientInput>>(input: T): Promise<T> {
+  if (!input.address?.area || input.address.zoneId) return input;
+  const zone = await ZoneModel.findOne({ areas: input.address.area }, '_id').lean();
+  return zone ? { ...input, address: { ...input.address, zoneId: zone._id.toString() } } : input;
+}
 
 async function load(id: string) {
-  const client = await ClientModel.findById(id);
+  const client = await ClientModel.findById(id).populate(CLIENT_POPULATE);
   if (!client) throw notFound('Client not found');
   return client;
 }
@@ -60,15 +124,30 @@ async function evictKeys(client: IClient) {
 }
 
 export const ClientsService = {
-  async list(q: { page: number; limit: number; search?: string; status?: ClientStatus }) {
+  async list(q: {
+    page: number;
+    limit: number;
+    search?: string;
+    status?: ClientStatus;
+    industry?: ClientIndustry;
+  }) {
     const filter: Record<string, unknown> = {};
     if (q.status) filter.status = q.status;
+    if (q.industry) filter.industry = q.industry;
     if (q.search) {
       const rx = searchRegex(q.search);
-      filter.$or = [{ name: rx }, { contactName: rx }, { email: rx }, { phone: rx }];
+      filter.$or = [
+        { name: rx },
+        { legalName: rx },
+        { 'contact.name': rx },
+        { 'contact.email': rx },
+        { 'contact.phone': rx },
+        { rcNumber: rx },
+      ];
     }
     const [clients, total] = await Promise.all([
       ClientModel.find(filter)
+        .populate(CLIENT_POPULATE)
         .sort({ name: 1 })
         .skip((q.page - 1) * q.limit)
         .limit(q.limit),
@@ -77,36 +156,51 @@ export const ClientsService = {
     return paginate(clients.map(toDto), total, q.page, q.limit);
   },
 
-  /** Lightweight list for pickers (e.g. "book on behalf of"). */
+  /** Lightweight list for pickers, with the pickup defaults a phone booking pre-fills. */
   async options() {
-    const clients = await ClientModel.find({ status: 'active' }, 'name phone')
+    const clients = await ClientModel.find({ status: 'active' }, 'name contact address')
       .sort({ name: 1 })
       .lean();
-    return clients.map((c) => ({ id: c._id.toString(), name: c.name, phone: c.phone }));
+    return clients.map((c) => ({
+      id: c._id.toString(),
+      name: c.name,
+      pickup: {
+        contactName: c.contact.name,
+        phone: c.contact.phone,
+        address: c.address.line,
+        zoneId: c.address.zone?.toString(),
+        area: c.address.area,
+        landmark: c.address.landmark,
+      },
+    }));
   },
 
   async get(id: string) {
     const client = await load(id);
-    const [orders, activeOrders, outstanding] = await Promise.all([
-      OrderModel.countDocuments({ client: id }),
-      OrderModel.countDocuments({
+    const [shipments, activeShipments, outstanding] = await Promise.all([
+      ShipmentModel.countDocuments({ client: id }),
+      ShipmentModel.countDocuments({
         client: id,
         status: { $in: ['created', ...ACTIVE_RIDER_STATUSES, 'at_hub'] },
       }),
       FinanceService.clientOutstanding(id),
     ]);
-    return { ...toDto(client), stats: { orders, activeOrders, outstanding } };
+    return { ...toDto(client), stats: { shipments, activeShipments, outstanding } };
   },
 
   async create(input: ClientInput, adminId: string) {
-    return toDto(await ClientModel.create({ ...input, createdBy: adminId }));
+    const client = await ClientModel.create({
+      ...toDoc(await withResolvedZone(input)),
+      createdBy: adminId,
+    });
+    return toDto(await load(client.id));
   },
 
   async update(id: string, input: Partial<ClientInput>) {
-    const client = await ClientModel.findByIdAndUpdate(id, input, {
+    const client = await ClientModel.findByIdAndUpdate(id, toDoc(await withResolvedZone(input)), {
       new: true,
       runValidators: true,
-    });
+    }).populate(CLIENT_POPULATE);
     if (!client) throw notFound('Client not found');
     return toDto(client);
   },
