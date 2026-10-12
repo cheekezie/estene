@@ -8,3 +8,124 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-manrope), var(--font-inter), sans-serif;
 }
+
+/* ── Hero motion ─────────────────────────────────────────────────────────── */
+/* Linear, so the trail's head stays under the rider (which also moves linearly). */
+@keyframes trail-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  90% {
+    stroke-dashoffset: 0.1;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+.route-trail {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: trail-draw linear infinite both;
+}
+
+@keyframes pin-pulse {
+  0%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+.pin-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pin-pulse 2.4s ease-out infinite;
+}
+
+/* Three cards share a 12s loop, each on stage for ~4s. */
+@keyframes notice-cycle {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  4%,
+  28% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  33%,
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+}
+.hero-notice {
+  opacity: 0;
+  animation: notice-cycle 12s ease-in-out infinite;
+}
+
+/* Four words + the first repeated, so the end frame equals the start frame. */
+@keyframes word-roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-4.6em);
+  }
+}
+.word-roller {
+  animation: word-roll 9s steps(4, end) infinite;
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  /* Where supported: hold each word, then slide to the next. */
+  .word-roller {
+    animation-timing-function: linear(
+      0,
+      0 20%,
+      0.25 25%,
+      0.25 45%,
+      0.5 50%,
+      0.5 70%,
+      0.75 75%,
+      0.75 95%,
+      1 100%
+    );
+  }
+}
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.ticker {
+  animation: ticker 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-trail {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .pin-pulse,
+  .ticker,
+  .word-roller {
+    animation: none;
+  }
+  .hero-notice {
+    animation: none;
+    opacity: 0;
+  }
+  .hero-notice:last-child {
+    opacity: 1;
+  }
+  .rider-marker {
+    display: none;
+  }
+}

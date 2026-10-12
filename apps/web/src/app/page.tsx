@@ -11,11 +11,27 @@ import {
   Truck,
 } from 'lucide-react';
 import { SERVICE_LEVELS, SERVICE_LEVEL_META } from '@estene/contracts/enums';
-import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
+import { AreaTicker } from '@/components/hero/AreaTicker';
+import { LiveCityMap } from '@/components/hero/LiveCityMap';
+import { RotatingWord } from '@/components/hero/RotatingWord';
 import { TrackForm } from '@/components/TrackForm';
 import { publicApi, type PublicZone } from '@/lib/api';
 
 export const revalidate = 300;
+
+const FALLBACK_AREAS = [
+  'Wuse II',
+  'Garki',
+  'Maitama',
+  'Asokoro',
+  'Jabi',
+  'Utako',
+  'Gwarinpa',
+  'Kubwa',
+  'Lugbe',
+  'Apo',
+  'Nyanya',
+];
 
 const STEPS = [
   {
@@ -57,33 +73,45 @@ export default async function HomePage() {
     <>
       {/* Hero */}
       <section className="relative overflow-hidden bg-blue-950 text-white">
-        <HeroRoutes />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 md:py-24 lg:grid-cols-[1.15fr_1fr]">
+        <div className="pointer-events-none absolute -right-40 -top-40 size-[520px] rounded-full bg-blue-600/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-48 -left-32 size-[420px] rounded-full bg-amber-400/10 blur-3xl" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-14 sm:px-6 md:pb-28 md:pt-20 lg:grid-cols-[1.1fr_1fr]">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-blue-100 ring-1 ring-white/15">
               <span className="bg-accent size-1.5 rounded-full" /> Now delivering across Abuja
             </p>
-            <h1 className="font-display mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-              Send it across Abuja. <span className="text-amber-400">Know where it is</span> every
-              step.
+            <h1 className="font-display mt-5 text-[2.6rem] font-extrabold leading-[1.15] tracking-tight sm:text-6xl lg:text-[4.2rem]">
+              Send <RotatingWord words={['documents', 'gifts', 'orders', 'anything']} />
+              <br />
+              across Abuja.
             </h1>
-            <p className="mt-5 max-w-xl text-lg text-blue-100/90">
-              Doorstep pickup, QR-tagged handling and PIN-secured delivery — from Wuse to Kubwa,
-              Garki to Lugbe.
+            <p className="mt-6 max-w-xl text-lg text-blue-100/90">
+              A rider at your door in minutes. Every parcel QR-tagged, tracked live, and handed over
+              only with the recipient’s PIN.
             </p>
-            <div className="mt-8 max-w-xl">
-              <TrackForm size="lg" />
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/send"
+                className="bg-accent text-accent-foreground hover:bg-accent-hover inline-flex items-center justify-center gap-2 rounded-xl px-6 py-4 text-base font-bold shadow-lg shadow-amber-500/20 transition-transform hover:-translate-y-0.5"
+              >
+                Send a parcel <ArrowRight className="size-5" />
+              </Link>
+              <Link
+                href="#track"
+                className="inline-flex items-center justify-center rounded-xl px-6 py-4 text-base font-semibold text-white ring-1 ring-white/25 hover:bg-white/10"
+              >
+                Track a parcel
+              </Link>
             </div>
-            <Link
-              href="/send"
-              className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-white hover:text-amber-300"
-            >
-              Or get an instant quote <ArrowRight className="size-4" />
-            </Link>
+            <div id="track" className="mt-8 max-w-xl scroll-mt-24">
+              <TrackForm />
+            </div>
           </div>
-          <ParcelCard />
+          <LiveCityMap />
         </div>
       </section>
+
+      <AreaTicker areas={zones.length ? zones.flatMap((z) => z.areas) : FALLBACK_AREAS} />
 
       {/* Trust strip */}
       <section className="border-b bg-white">
@@ -247,74 +275,5 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
         {title}
       </h2>
     </div>
-  );
-}
-
-/** Product preview: what a customer sees while their parcel moves. */
-function ParcelCard() {
-  const steps = ['created', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered'] as const;
-  const current = 3;
-  return (
-    <div
-      className="relative mx-auto w-full max-w-sm rounded-2xl bg-white p-6 text-slate-900 shadow-2xl shadow-black/30"
-      aria-hidden
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-sm font-semibold">EST7K3M9Q2XA</span>
-        <span className="bg-accent-soft rounded-full px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-          {SHIPMENT_STATUS_META.out_for_delivery.label}
-        </span>
-      </div>
-      <p className="mt-1 text-sm text-slate-500">Wuse II → Garki II</p>
-      <ol className="mt-6 space-y-4">
-        {steps.map((s, i) => (
-          <li key={s} className="flex items-center gap-3">
-            <span
-              className={`grid size-6 place-items-center rounded-full text-[11px] font-bold ${i < current ? 'bg-primary text-white' : i === current ? 'bg-accent text-accent-foreground ring-4 ring-amber-100' : 'bg-slate-100 text-slate-400'}`}
-            >
-              {i < current ? <Check className="size-3.5" /> : i + 1}
-            </span>
-            <span className={`text-sm ${i <= current ? 'font-medium' : 'text-slate-400'}`}>
-              {SHIPMENT_STATUS_META[s].label}
-            </span>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-6 flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm">
-        <KeyRound className="text-primary size-4" />
-        <span>Recipient PIN sent by SMS</span>
-      </div>
-    </div>
-  );
-}
-
-function HeroRoutes() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-40"
-      viewBox="0 0 1200 600"
-      preserveAspectRatio="xMidYMid slice"
-      fill="none"
-      aria-hidden
-    >
-      <path
-        d="M-20 520 C 200 420, 320 480, 520 360 S 860 160, 1220 120"
-        stroke="var(--color-blue-700)"
-        strokeWidth="2"
-        strokeDasharray="6 10"
-      />
-      <path
-        d="M-20 300 C 180 260, 300 140, 560 180 S 900 380, 1220 300"
-        stroke="var(--color-blue-800)"
-        strokeWidth="2"
-      />
-      <path
-        d="M300 620 C 420 480, 600 460, 760 300"
-        stroke="var(--color-amber-400)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      />
-      <circle cx="760" cy="300" r="6" fill="var(--color-amber-400)" />
-    </svg>
   );
 }
