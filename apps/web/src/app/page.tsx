@@ -14,7 +14,6 @@ import { SERVICE_LEVELS, SERVICE_LEVEL_META } from '@estene/contracts/enums';
 import { AreaTicker } from '@/components/hero/AreaTicker';
 import { LiveCityMap } from '@/components/hero/LiveCityMap';
 import { RotatingWord } from '@/components/hero/RotatingWord';
-import { TrackForm } from '@/components/TrackForm';
 import { publicApi, type PublicZone } from '@/lib/api';
 
 export const revalidate = 300;
@@ -97,14 +96,11 @@ export default async function HomePage() {
                 Send a parcel <ArrowRight className="size-5" />
               </Link>
               <Link
-                href="#track"
+                href="/track"
                 className="inline-flex items-center justify-center rounded-xl px-6 py-4 text-base font-semibold text-white ring-1 ring-white/25 hover:bg-white/10"
               >
                 Track a parcel
               </Link>
-            </div>
-            <div id="track" className="mt-8 max-w-xl scroll-mt-24">
-              <TrackForm />
             </div>
           </div>
           <LiveCityMap />
