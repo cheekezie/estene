@@ -10,26 +10,6 @@
 }
 
 /* ── Hero motion ─────────────────────────────────────────────────────────── */
-/* Linear, so the trail's head stays under the rider (which also moves linearly). */
-@keyframes trail-draw {
-  0% {
-    stroke-dashoffset: 1;
-    opacity: 1;
-  }
-  90% {
-    stroke-dashoffset: 0.1;
-    opacity: 1;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 0;
-  }
-}
-.route-trail {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: trail-draw linear infinite both;
-}
 
 /* Four words + the first repeated, so the end frame equals the start frame. */
 @keyframes word-roll {
@@ -69,24 +49,25 @@
   animation: ticker 40s linear infinite;
 }
 
-/* The parked rider only appears when motion is reduced. */
-.rider-static {
-  display: none;
+/* Status card content swaps with a short fade as the rider moves on. */
+@keyframes status-swap {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.status-swap {
+  animation: status-swap 0.35s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .route-trail {
-    animation: none;
-    stroke-dashoffset: 0.5;
-  }
   .ticker,
-  .word-roller {
+  .word-roller,
+  .status-swap {
     animation: none;
-  }
-  .rider-moving {
-    display: none;
-  }
-  .rider-static {
-    display: inline;
   }
 }

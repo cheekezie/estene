@@ -1,16 +1,41 @@
-import { Truck } from 'lucide-react';
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Truck } from 'lucide-react';
 
 /**
- * Hero scene: a stylised Abuja with one Estene rider travelling a single
- * route while the trail draws in behind them. Deliberately calm — one moving
- * thing, everything else static. Pure SVG (SMIL animateMotion), no JS.
+ * Hero scene: one Estene rider doing a delivery round across a stylised
+ * Abuja. Each leg the status card reads "Out for delivery"; on arrival it
+ * flips to "Delivered" while the rider pauses, then the next leg starts.
+ *
+ * The rider and trail are moved by a requestAnimationFrame loop writing
+ * straight to SVG attributes (no React re-render per frame); only the status
+ * card goes through state. Reduced motion: rider parked, card static.
  */
 
-// Jabi → across the city → Asokoro. Mostly left-to-right so the side-view rider always faces forward.
-const ROUTE = 'M58 330 C 130 300, 170 250, 236 262 S 340 300, 418 258';
-const START: [number, number] = [58, 330];
-const END: [number, number] = [418, 258];
-const DURATION_S = 12;
+type Stop = { name: string; at: [number, number] };
+type Leg = { to: Stop; d: string };
+
+const STOPS = {
+  jabi: { name: 'Jabi', at: [58, 330] },
+  asokoro: { name: 'Asokoro', at: [418, 258] },
+  maitama: { name: 'Maitama', at: [330, 104] },
+  garki: { name: 'Garki', at: [300, 400] },
+  wuse: { name: 'Wuse', at: [128, 176] },
+} satisfies Record<string, Stop>;
+
+/** The round, in order. Each path starts where the previous one ended. */
+const LEGS: Leg[] = [
+  { to: STOPS.asokoro, d: 'M58 330 C 130 300, 170 250, 236 262 S 340 300, 418 258' },
+  { to: STOPS.maitama, d: 'M418 258 C 430 200, 400 150, 330 104' },
+  { to: STOPS.garki, d: 'M330 104 C 250 140, 210 250, 230 320 S 280 390, 300 400' },
+  { to: STOPS.wuse, d: 'M300 400 C 230 380, 180 300, 200 250 S 150 190, 128 176' },
+  { to: STOPS.jabi, d: 'M128 176 C 90 220, 60 270, 58 330' },
+];
+
+const SPEED = 42; // SVG units per second — slow and readable
+const PAUSE_MS = 2600; // time on the "Delivered" card before the next leg
+const MAX_TILT = 22; // degrees — a side-view bike leans, it never points at the sky
 
 const DISTRICTS = [
   { x: 250, y: 60, w: 150, h: 90, label: 'MAITAMA' },
@@ -20,7 +45,70 @@ const DISTRICTS = [
   { x: 350, y: 200, w: 112, h: 120, label: 'ASOKORO' },
 ];
 
+type Status = { leg: number; phase: 'riding' | 'delivered' };
+
 export function LiveCityMap() {
+  const [status, setStatus] = useState<Status>({ leg: 0, phase: 'riding' });
+  const pathRefs = useRef<(SVGPathElement | null)[]>([]);
+  const trailRef = useRef<SVGPathElement>(null);
+  const riderRef = useRef<SVGGElement>(null);
+  const progressRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let leg = 0;
+    let legStart = performance.now();
+    let pausedUntil = 0;
+    let raf = 0;
+
+    const place = (legIdx: number, t: number) => {
+      const path = pathRefs.current[legIdx];
+      if (!path || !riderRef.current || !trailRef.current) return;
+      const len = path.getTotalLength();
+      const at = len * t;
+      const p = path.getPointAtLength(at);
+      const ahead = path.getPointAtLength(Math.min(len, at + 2));
+      const behind = path.getPointAtLength(Math.max(0, at - 2));
+      const dx = ahead.x - behind.x;
+      const dy = ahead.y - behind.y;
+      const facingRight = dx >= 0;
+      // Lean with the slope, mirrored when riding left, clamped so it stays a bike.
+      const slope = (Math.atan2(dy, Math.abs(dx) || 0.001) * 180) / Math.PI;
+      const tilt = Math.max(-MAX_TILT, Math.min(MAX_TILT, slope)) * (facingRight ? 1 : -1);
+      riderRef.current.setAttribute(
+        'transform',
+        `translate(${p.x} ${p.y}) rotate(${tilt}) scale(${facingRight ? 1 : -1} 1)`,
+      );
+      trailRef.current.setAttribute('d', path.getAttribute('d') ?? '');
+      trailRef.current.style.strokeDashoffset = String(1 - t);
+      if (progressRef.current) progressRef.current.style.width = `${Math.round(t * 100)}%`;
+    };
+
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      if (now < pausedUntil) return;
+      if (pausedUntil) {
+        // Pause over — start the next leg.
+        pausedUntil = 0;
+        leg = (leg + 1) % LEGS.length;
+        legStart = now;
+        setStatus({ leg, phase: 'riding' });
+      }
+      const len = pathRefs.current[leg]?.getTotalLength() ?? 1;
+      const t = Math.min(1, (now - legStart) / ((len / SPEED) * 1000));
+      place(leg, t);
+      if (t >= 1) {
+        pausedUntil = now + PAUSE_MS;
+        setStatus({ leg, phase: 'delivered' });
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const current = LEGS[status.leg]!;
+  const delivered = status.phase === 'delivered';
+
   return (
     <div className="relative mx-auto w-full max-w-[480px]" aria-hidden>
       <div className="relative overflow-hidden rounded-[28px] bg-blue-900/40 ring-1 ring-white/10 backdrop-blur-sm">
@@ -29,7 +117,6 @@ export function LiveCityMap() {
             <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
               <path d="M24 0H0V24" fill="none" stroke="rgba(141,176,251,0.08)" strokeWidth="1" />
             </pattern>
-            <path id="route" d={ROUTE} />
           </defs>
 
           <rect width="480" height="500" fill="url(#grid)" />
@@ -74,59 +161,53 @@ export function LiveCityMap() {
             strokeLinecap="round"
           />
 
-          {/* the route: faint dotted guide + amber trail that draws in with the rider */}
-          <use
-            href="#route"
-            fill="none"
-            stroke="rgba(255,255,255,0.18)"
-            strokeWidth="3"
-            strokeDasharray="2 8"
-            strokeLinecap="round"
-          />
+          {/* the whole round as faint dotted guides */}
+          {LEGS.map((l, i) => (
+            <path
+              key={i}
+              ref={(el) => {
+                pathRefs.current[i] = el;
+              }}
+              d={l.d}
+              fill="none"
+              stroke="rgba(255,255,255,0.14)"
+              strokeWidth="3"
+              strokeDasharray="2 8"
+              strokeLinecap="round"
+            />
+          ))}
+
+          {/* current leg's trail, drawn up to the rider */}
           <path
-            d={ROUTE}
+            ref={trailRef}
+            d={LEGS[0]!.d}
             fill="none"
             stroke="var(--color-amber-400)"
             strokeWidth="4"
             strokeLinecap="round"
             pathLength={1}
-            className="route-trail"
-            style={{ animationDuration: `${DURATION_S}s` }}
+            strokeDasharray="1"
+            strokeDashoffset="0.5"
           />
 
-          {/* pickup + drop-off pins (static) */}
-          <circle
-            cx={START[0]}
-            cy={START[1]}
-            r="6"
-            fill="#fff"
-            stroke="var(--color-blue-400)"
-            strokeWidth="3"
-          />
-          <g transform={`translate(${END[0]} ${END[1]})`}>
-            <circle r="15" fill="var(--color-amber-400)" opacity="0.25" />
-            <circle r="7" fill="#fff" stroke="var(--color-amber-400)" strokeWidth="3.5" />
-          </g>
+          {/* stops: the current destination is highlighted */}
+          {Object.values(STOPS).map((s) => {
+            const active = s.name === current.to.name;
+            return (
+              <g key={s.name} transform={`translate(${s.at[0]} ${s.at[1]})`}>
+                {active && <circle r="15" fill="var(--color-amber-400)" opacity="0.28" />}
+                <circle
+                  r={active ? 7 : 5}
+                  fill="#fff"
+                  stroke={active ? 'var(--color-amber-400)' : 'var(--color-blue-400)'}
+                  strokeWidth={active ? 3.5 : 2.5}
+                />
+              </g>
+            );
+          })}
 
-          {/* the rider — fades in at pickup, rides the route, fades out at drop-off */}
-          <g className="rider-moving">
-            <animate
-              attributeName="opacity"
-              values="0;1;1;0"
-              keyTimes="0;0.06;0.9;1"
-              dur={`${DURATION_S}s`}
-              repeatCount="indefinite"
-            />
-            <g>
-              <animateMotion dur={`${DURATION_S}s`} repeatCount="indefinite" rotate="auto">
-                <mpath href="#route" />
-              </animateMotion>
-              <DeliveryRider />
-            </g>
-          </g>
-
-          {/* reduced motion: the rider parked mid-route instead */}
-          <g className="rider-static" transform="translate(236 262) rotate(-4)">
+          {/* the rider — positioned by the animation loop; initial spot matches the reduced-motion pose */}
+          <g ref={riderRef} transform="translate(236 262) rotate(-4)">
             <DeliveryRider />
           </g>
         </svg>
@@ -137,24 +218,40 @@ export function LiveCityMap() {
         </div>
       </div>
 
-      {/* One fixed status card — what the customer sees by SMS */}
-      <div className="absolute -bottom-6 -left-4 flex w-64 items-center gap-3 rounded-2xl bg-white p-3 text-slate-900 shadow-2xl shadow-black/30 sm:-left-10">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-400 text-amber-950">
-          <Truck className="size-4.5" />
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">Out for delivery</span>
-          <span className="block truncate text-xs text-slate-500">Musa is heading to Asokoro</span>
-        </span>
+      {/* Status card follows the rider: out for delivery → delivered → next stop */}
+      <div className="absolute -bottom-6 -left-4 w-64 overflow-hidden rounded-2xl bg-white text-slate-900 shadow-2xl shadow-black/30 sm:-left-10">
+        <div
+          key={`${status.leg}-${status.phase}`}
+          className="status-swap flex items-center gap-3 p-3"
+        >
+          <span
+            className={`grid size-9 shrink-0 place-items-center rounded-xl ${delivered ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-amber-950'}`}
+          >
+            {delivered ? <CheckCircle2 className="size-5" /> : <Truck className="size-4.5" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">
+              {delivered ? `Delivered · ${current.to.name}` : 'Out for delivery'}
+            </span>
+            <span className="block truncate text-xs text-slate-500">
+              {delivered
+                ? 'Handed over with the recipient’s PIN'
+                : `Musa is heading to ${current.to.name}`}
+            </span>
+          </span>
+        </div>
+        <div className="h-1 bg-slate-100">
+          <span
+            ref={progressRef}
+            className={`block h-full transition-colors ${delivered ? 'bg-emerald-500' : 'bg-amber-400'}`}
+            style={{ width: delivered ? '100%' : '50%' }}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-/**
- * Side view of an Estene rider on a delivery scooter, facing right.
- * Origin = point between the wheels on the road, so it sits on the route.
- */
 function DeliveryRider() {
   return (
     <g transform="translate(-2 -2) scale(1.05)">
