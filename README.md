@@ -28,7 +28,7 @@ pnpm install
 cp apps/api/.env.example apps/api/.env      # then set JWT_SECRET + ENCRYPTION_KEY (openssl rand -hex 32)
 cp apps/admin/.env.example apps/admin/.env
 cp apps/web/.env.example apps/web/.env.local
-pnpm seed                                    # super admin, 9 Abuja zones, pricing, 2 demo riders, 50 QR tags
+pnpm seed                                    # super admin, Abuja + Lagos zones, offices, pricing, demo riders, QR tags
 pnpm dev                                     # everything; or dev:api / dev:admin / dev:web
 ```
 
@@ -52,4 +52,5 @@ Commits follow Conventional Commits (`feat(api): …`), enforced by commitlint.
 
 - [`docs/architecture.md`](docs/architecture.md) — system design, domain flows, decisions and roadmap
 - [`docs/integrations.md`](docs/integrations.md) — integration API + webhooks guide (share with partner developers)
+- [`docs/plans/fleet-partners.md`](docs/plans/fleet-partners.md) — **start here next**: where we left off, next steps, fleet partners plan
 - [`CLAUDE.md`](CLAUDE.md) — conventions for contributors and coding agents

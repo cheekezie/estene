@@ -1,7 +1,56 @@
 # Plan: Fleet partners
 
-**Status:** planned · next up  
+**Status:** planned · next up — see §0 for where we left off  
 **Goal:** Companies that own bikes and riders can bring them onto the Estene network. We dispatch trips to their riders; the fleet sees its own operation (riders, trips, earnings, heatmaps, live location) in a portal of its own.
+
+---
+
+## 0. Where we left off · next steps
+
+**State on 2026-10-12** (last commit `5988851`):
+
+- **Done and committed:**
+  - shipments, dispatch, QR tags, PIN/photo proof, SMS
+  - business clients with the API and webhooks
+  - payments view, riders' earnings and payouts
+  - public site with the animated hero
+  - **offices and manifests:** drop-off, consolidation, interstate line-haul, office collection, counter scanning
+- **Office and manifest steps are legs of the shipment's journey, not a separate feature.** A shipment carries:
+  - its route (`fulfilment`)
+  - the office it's at (`currentOffice`)
+  - its manifest
+  - each rider's leg (`riderLegs`)
+
+  New work (fleets, hubs) should keep the shipment as the one record of the journey.
+
+- **To resume:** start MongoDB and Redis, then run `pnpm install && pnpm seed && pnpm dev`.
+  - The seed adds Abuja and Lagos zones, the offices ABJ-WSE, ABJ-GRK and LOS-IKJ, and office agents `office.wuse@estene.ng` and `office.ikeja@estene.ng`.
+  - Office agents use the seed admin password.
+
+**Next steps, in order:**
+
+1. **Settle the decisions in §10** (settlement, commission, onboarding, map provider). These block Phase 1.
+2. **Fleet Phase 1 (foundation):**
+   - `Fleet` model and admin Network → Fleets
+   - attach riders, migrating `fleetName` → `fleet`
+   - fleet commission
+   - ledger `fleet` account and fleet payouts
+3. **Fleet Phase 2:** the `apps/fleet` portal (FleetUser auth; overview, riders, trips, earnings).
+4. **Fleet Phases 3–4:** live location (breadcrumbs, SSE, access log), then heatmaps and performance.
+5. **Rider app:**
+   - jobs, accept/decline, heartbeat location
+   - pickup with tag scan and price adjustment
+   - office hand-in and collect-from-office (`POST /rider/jobs/:id/collect-from-office` exists)
+   - PIN/photo delivery, earnings
+   - its heartbeats feed fleet live location
+6. **SaySwitch integration:** implement the `PaymentGateway` interface (checkout, virtual account for price top-ups, webhook verification) and payouts to riders and fleets. The view is built and the dev simulator is in place.
+
+**Small follow-ups from the offices work:**
+
+- Show a shipment's past `riderLegs` (who carried each leg, and pay) on the shipment page.
+- A manifest print sheet or waybill PDF for the bus park.
+- Tests for `allowedActions`, manifest depart/receive and per-leg ledger postings.
+- Old timeline entries say "At Estene office" without naming the office. New ones name it.
 
 ---
 
