@@ -39,8 +39,48 @@ export const SERVICE_LEVEL_META: Record<ServiceLevel, { label: string; hint: str
   same_day: { label: 'Same day', hint: 'Book before 2pm, delivered today' },
 };
 
-export const PAYMENT_METHODS = ['card', 'transfer', 'cash_on_pickup', 'cash_on_delivery'] as const;
+export const PAYMENT_METHODS = [
+  'card',
+  'transfer',
+  'cash_on_pickup',
+  'cash_on_delivery',
+  'on_account',
+] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** What a walk-in/web customer may choose. `on_account` is only for business clients. */
+export const CUSTOMER_PAYMENT_METHODS = [
+  'card',
+  'transfer',
+  'cash_on_pickup',
+  'cash_on_delivery',
+] as const;
+
+/** Business clients are invoiced; they can also let the rider collect cash. */
+export const CLIENT_PAYMENT_METHODS = ['on_account', 'cash_on_pickup', 'cash_on_delivery'] as const;
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  card: 'Card',
+  transfer: 'Bank transfer',
+  cash_on_pickup: 'Cash at pickup',
+  cash_on_delivery: 'Cash on delivery',
+  on_account: 'On account (invoiced)',
+};
+
+/** Where an order came from. */
+export const ORDER_SOURCES = ['web', 'admin', 'api'] as const;
+export type OrderSource = (typeof ORDER_SOURCES)[number];
+
+export const CLIENT_STATUSES = ['active', 'suspended'] as const;
+export type ClientStatus = (typeof CLIENT_STATUSES)[number];
+
+/** Webhook event types a business client can subscribe to. */
+export const WEBHOOK_EVENTS = [
+  'order.created',
+  'order.status_changed',
+  'order.price_adjusted',
+] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 export const PAYMENT_STATUSES = ['unpaid', 'paid', 'refunded'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
@@ -55,11 +95,18 @@ export type RiderStatus = (typeof RIDER_STATUSES)[number];
 export const VEHICLE_TYPES = ['bike', 'tricycle', 'car', 'van'] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 
-export const ADMIN_ROLES = ['super_admin', 'ops_manager', 'dispatcher', 'finance', 'support'] as const;
+export const ADMIN_ROLES = [
+  'super_admin',
+  'ops_manager',
+  'dispatcher',
+  'finance',
+  'support',
+] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 /** Who is on the other end of a JWT. */
-export const ACTOR_TYPES = ['admin', 'rider', 'customer'] as const;
+/** `client` = a business integration acting through an API key. */
+export const ACTOR_TYPES = ['admin', 'rider', 'customer', 'client'] as const;
 export type ActorType = (typeof ACTOR_TYPES)[number];
 
 export const DELIVERY_PROOF_METHODS = ['pin', 'photo'] as const;

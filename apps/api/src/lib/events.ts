@@ -10,9 +10,13 @@ import type { OrderStatus } from '@estene/contracts/enums';
  * (SMS, email) is handed to a BullMQ queue from inside the listener.
  */
 export type DomainEvents = {
+  /** A brand-new order. Fires exactly once per order. */
   'order.created': { orderId: string };
+  /** An existing order needs a rider again (e.g. ops removed the assigned rider). */
+  'dispatch.requested': { orderId: string };
   'order.status_changed': { orderId: string; from: OrderStatus; to: OrderStatus; actorId: string };
   'order.price_adjusted': { orderId: string; from: number; to: number; reason?: string };
+  'order.paid': { orderId: string };
   'dispatch.offered': { orderId: string; riderId: string; offerId: string; expiresAt: Date };
 };
 
@@ -23,7 +27,10 @@ class TypedBus {
     this.emitter.emit(event, payload);
   }
 
-  on<K extends keyof DomainEvents>(event: K, handler: (payload: DomainEvents[K]) => void | Promise<void>) {
+  on<K extends keyof DomainEvents>(
+    event: K,
+    handler: (payload: DomainEvents[K]) => void | Promise<void>,
+  ) {
     this.emitter.on(event, async (payload: DomainEvents[K]) => {
       try {
         await handler(payload);

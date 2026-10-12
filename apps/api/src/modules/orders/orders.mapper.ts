@@ -3,13 +3,20 @@ import type { OrderDto, PublicTrackingDto, StopDto } from '@estene/contracts/ord
 import type { IOrder, IStop } from './models/order.model';
 
 type ZoneRef = { _id: Types.ObjectId; name: string; code: string };
-type RiderRef = { _id: Types.ObjectId; firstName: string; lastName: string; phone: string; code: string };
+type RiderRef = {
+  _id: Types.ObjectId;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  code: string;
+};
 
 /** Orders are always loaded with `.populate(ORDER_POPULATE)` before mapping. */
 export const ORDER_POPULATE = [
   { path: 'pickup.zone', select: 'name code' },
   { path: 'dropoff.zone', select: 'name code' },
   { path: 'rider', select: 'firstName lastName phone code' },
+  { path: 'client', select: 'name' },
 ];
 
 const toStopDto = (s: IStop): StopDto => {
@@ -27,12 +34,20 @@ const toStopDto = (s: IStop): StopDto => {
   };
 };
 
+const clientRef = (o: IOrder) => {
+  const c = o.client as unknown as { _id: Types.ObjectId; name: string } | null | undefined;
+  return c && 'name' in c ? { id: c._id.toString(), name: c.name } : null;
+};
+
 export function toOrderDto(o: IOrder): OrderDto {
   const rider = o.rider as unknown as RiderRef | null;
   return {
     id: o._id.toString(),
     trackingNumber: o.trackingNumber,
     status: o.status,
+    source: o.source,
+    client: clientRef(o),
+    externalReference: o.externalReference,
     pickup: toStopDto(o.pickup),
     dropoff: toStopDto(o.dropoff),
     parcel: o.parcel,
@@ -43,10 +58,20 @@ export function toOrderDto(o: IOrder): OrderDto {
     finalAmount: o.finalAmount,
     // Unset nested paths come back as {} on hydrated docs — check a required field, not the object.
     adjustment: o.adjustment?.at
-      ? { from: o.adjustment.from, to: o.adjustment.to, reason: o.adjustment.reason, at: o.adjustment.at.toISOString() }
+      ? {
+          from: o.adjustment.from,
+          to: o.adjustment.to,
+          reason: o.adjustment.reason,
+          at: o.adjustment.at.toISOString(),
+        }
       : undefined,
     rider: rider
-      ? { id: rider._id.toString(), name: `${rider.firstName} ${rider.lastName}`, phone: rider.phone, code: rider.code }
+      ? {
+          id: rider._id.toString(),
+          name: `${rider.firstName} ${rider.lastName}`,
+          phone: rider.phone,
+          code: rider.code,
+        }
       : null,
     tagCode: o.tagCode,
     proof: o.proof?.at ? { ...o.proof, at: o.proof.at.toISOString() } : undefined,
@@ -75,4 +100,5 @@ export function toPublicTrackingDto(o: IOrder): PublicTrackingDto {
 }
 
 /** Amount the customer actually owes: the rider-confirmed price, else the estimate. */
-export const payableAmount = (o: Pick<IOrder, 'finalAmount' | 'estimate'>) => o.finalAmount ?? o.estimate.total;
+export const payableAmount = (o: Pick<IOrder, 'finalAmount' | 'estimate'>) =>
+  o.finalAmount ?? o.estimate.total;

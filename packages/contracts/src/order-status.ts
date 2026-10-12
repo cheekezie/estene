@@ -11,12 +11,12 @@ type Transition = { to: OrderStatus; by: readonly ActorType[] };
 const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   created: [
     { to: 'assigned', by: ['admin', 'rider'] },
-    { to: 'cancelled', by: ['admin', 'customer'] },
+    { to: 'cancelled', by: ['admin', 'customer', 'client'] },
   ],
   assigned: [
     { to: 'en_route_to_pickup', by: ['rider'] },
     { to: 'created', by: ['admin', 'rider'] }, // unassign / rider declines after accepting
-    { to: 'cancelled', by: ['admin', 'customer'] },
+    { to: 'cancelled', by: ['admin', 'customer', 'client'] },
   ],
   en_route_to_pickup: [
     { to: 'picked_up', by: ['rider'] },

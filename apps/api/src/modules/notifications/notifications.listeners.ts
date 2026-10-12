@@ -20,21 +20,34 @@ const queueSms = (job: SmsJob) => getQueue(QUEUE).add('sms', job);
  */
 export function registerNotifications() {
   bus.on('order.created', async ({ orderId }) => {
-    const order = await OrderModel.findById(orderId, 'trackingNumber pickup.phone events').lean();
-    // Re-dispatch after an unassign also emits order.created — only greet genuinely new bookings.
-    if (!order || order.events.length > 1) return;
-    await queueSms({ to: order.pickup.phone, body: templates.senderStatus(order.trackingNumber, 'created'), template: 'sender.created', orderId });
+    const order = await OrderModel.findById(orderId, 'trackingNumber pickup.phone').lean();
+    if (!order) return;
+    await queueSms({
+      to: order.pickup.phone,
+      body: templates.senderStatus(order.trackingNumber, 'created'),
+      template: 'sender.created',
+      orderId,
+    });
   });
 
   bus.on('order.status_changed', async ({ orderId, to }) => {
     const meta = ORDER_STATUS_META[to];
     if (!meta.notify && !meta.notifyReceiver) return;
 
-    const order = await OrderModel.findById(orderId, 'trackingNumber pickup.phone pickup.contactName dropoff.phone').lean();
+    const order = await OrderModel.findById(
+      orderId,
+      'trackingNumber pickup.phone pickup.contactName dropoff.phone',
+    ).lean();
     if (!order) return;
     const tn = order.trackingNumber;
 
-    if (meta.notify) await queueSms({ to: order.pickup.phone, body: templates.senderStatus(tn, to), template: `sender.${to}`, orderId });
+    if (meta.notify)
+      await queueSms({
+        to: order.pickup.phone,
+        body: templates.senderStatus(tn, to),
+        template: `sender.${to}`,
+        orderId,
+      });
 
     if (meta.notifyReceiver) {
       let body: string | null = null;
@@ -45,26 +58,43 @@ export function registerNotifications() {
       }
       if (to === 'delivered') body = templates.receiverDelivered(tn);
       if (to === 'delivery_failed') body = templates.receiverFailed(tn);
-      if (body) await queueSms({ to: order.dropoff.phone, body, template: `receiver.${to}`, orderId });
+      if (body)
+        await queueSms({ to: order.dropoff.phone, body, template: `receiver.${to}`, orderId });
     }
   });
 
   bus.on('order.price_adjusted', async ({ orderId, from, to, reason }) => {
     const order = await OrderModel.findById(orderId, 'trackingNumber pickup.phone').lean();
     if (order) {
-      await queueSms({ to: order.pickup.phone, body: templates.priceAdjusted(order.trackingNumber, from, to, reason), template: 'sender.price_adjusted', orderId });
+      await queueSms({
+        to: order.pickup.phone,
+        body: templates.priceAdjusted(order.trackingNumber, from, to, reason),
+        template: 'sender.price_adjusted',
+        orderId,
+      });
     }
   });
 
   startWorker(QUEUE, async (job) => {
     const data = job.data as SmsJob;
-    const log = { channel: 'sms' as const, to: data.to, template: data.template, order: data.orderId, provider: sms.name };
+    const log = {
+      channel: 'sms' as const,
+      to: data.to,
+      template: data.template,
+      order: data.orderId,
+      provider: sms.name,
+    };
     try {
       await sms.send(data.to, data.body);
       await NotificationLogModel.create({ ...log, status: 'sent' });
     } catch (err) {
       const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-      if (isFinalAttempt) await NotificationLogModel.create({ ...log, status: 'failed', error: (err as Error).message });
+      if (isFinalAttempt)
+        await NotificationLogModel.create({
+          ...log,
+          status: 'failed',
+          error: (err as Error).message,
+        });
       throw err;
     }
   });

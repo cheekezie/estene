@@ -3,7 +3,12 @@ import { getQueue, startWorker } from '../../lib/queue';
 import { DISPATCH_QUEUE, DispatchService } from './dispatch.service';
 
 export function registerDispatch() {
-  bus.on('order.created', ({ orderId }) => getQueue(DISPATCH_QUEUE).add('dispatch-order', { orderId }).then(() => undefined));
+  const enqueue = ({ orderId }: { orderId: string }) =>
+    getQueue(DISPATCH_QUEUE)
+      .add('dispatch-order', { orderId })
+      .then(() => undefined);
+  bus.on('order.created', enqueue);
+  bus.on('dispatch.requested', enqueue);
 
   // Manual assignment or cancellation must kill any offer still on a rider's screen.
   bus.on('order.status_changed', async ({ orderId, to }) => {

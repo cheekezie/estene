@@ -14,6 +14,8 @@ export interface ILedgerEntry {
   account: 'platform' | 'rider' | 'customer';
   rider?: Types.ObjectId;
   order?: Types.ObjectId;
+  /** Business client billed for this entry (on-account orders). */
+  client?: Types.ObjectId;
   idempotencyKey: string;
   reference?: string;
   note?: string;
@@ -28,6 +30,7 @@ const ledgerEntrySchema = new Schema<ILedgerEntry>(
     account: { type: String, enum: ['platform', 'rider', 'customer'], required: true },
     rider: { type: Schema.Types.ObjectId, ref: 'Rider' },
     order: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
+    client: { type: Schema.Types.ObjectId, ref: 'Client' },
     idempotencyKey: { type: String, required: true, unique: true },
     reference: String,
     note: String,
@@ -38,5 +41,6 @@ const ledgerEntrySchema = new Schema<ILedgerEntry>(
 
 ledgerEntrySchema.index({ rider: 1, createdAt: -1 });
 ledgerEntrySchema.index({ type: 1, createdAt: -1 });
+ledgerEntrySchema.index({ client: 1, type: 1 });
 
 export const LedgerEntryModel = model<ILedgerEntry>('LedgerEntry', ledgerEntrySchema);

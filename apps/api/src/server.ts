@@ -6,6 +6,7 @@ import { redis } from './lib/redis';
 import { registerDispatch } from './modules/dispatch/dispatch.listeners';
 import { registerFinance } from './modules/finance/finance.listeners';
 import { registerNotifications } from './modules/notifications/notifications.listeners';
+import { registerWebhooks } from './modules/webhooks/webhooks.listeners';
 
 async function start() {
   await connectDB();
@@ -14,6 +15,7 @@ async function start() {
   registerDispatch();
   registerNotifications();
   registerFinance();
+  registerWebhooks();
 
   const app = await buildApp();
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

@@ -3,6 +3,8 @@ import { OrderModel } from '../orders/models/order.model';
 import { FinanceService } from './finance.service';
 
 export function registerFinance() {
+  bus.on('order.paid', ({ orderId }) => FinanceService.recordPaymentReceived(orderId));
+
   bus.on('order.status_changed', async ({ orderId, to }) => {
     if (to !== 'picked_up' && to !== 'delivered') return;
     const order = await OrderModel.findById(orderId, 'paymentMethod').lean();

@@ -17,7 +17,8 @@
     "./auth": "./src/auth.ts",
     "./zone": "./src/zone.ts",
     "./order": "./src/order.ts",
-    "./rider": "./src/rider.ts"
+    "./rider": "./src/rider.ts",
+    "./client": "./src/client.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"
