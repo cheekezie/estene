@@ -7,7 +7,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   CORS_ORIGINS: z
     .string()
-    .default('http://localhost:5400,http://localhost:3000')
+    .default('http://localhost:5400,http://localhost:3100')
     .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean)),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY must be 64 hex chars'),

@@ -7,14 +7,18 @@ import { RiderModel } from '../riders/models/rider.model';
 import { PresenceService } from '../riders/presence.service';
 import { LedgerEntryModel } from '../finance/models/ledger-entry.model';
 
+const DAY_MS = 86_400_000;
+/** WAT is a fixed UTC+1 (no DST) — "today" must not depend on the server's timezone. */
+const LAGOS_OFFSET_MS = 60 * 60 * 1000;
+const startOfLagosDay = () => new Date(Math.floor((Date.now() + LAGOS_OFFSET_MS) / DAY_MS) * DAY_MS - LAGOS_OFFSET_MS);
+
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('preHandler', app.authenticate);
   app.addHook('preHandler', requireActor('admin'));
 
   /** Ops overview: today's flow, what needs attention, and network capacity. */
   app.get('/overview', async (_req, reply) => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = startOfLagosDay();
 
     const [byStatus, todayCount, deliveredToday, needsRider, activeRiders, online, revenue, last7] = await Promise.all([
       OrderModel.aggregate<{ _id: OrderStatus; n: number }>([
@@ -31,7 +35,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       OrderModel.aggregate<{ _id: string; booked: number; delivered: number }>([
-        { $match: { createdAt: { $gte: new Date(Date.now() - 6 * 86_400_000) } } },
+        { $match: { createdAt: { $gte: new Date(startOfDay.getTime() - 6 * DAY_MS) } } },
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Africa/Lagos' } },

@@ -31,16 +31,15 @@ type ButtonProps = ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & { asChild?: boolean; loading?: boolean };
 
 export function Button({ className, variant, size, asChild, loading, disabled, children, ...props }: ButtonProps) {
-  const Comp = asChild ? Slot.Root : 'button';
+  const classes = cn(buttonVariants({ variant, size }), className);
+  // Slot merges onto exactly one child (e.g. a <Link>), so it can't carry the spinner.
+  if (asChild) {
+    return <Slot.Root className={classes} {...props}>{children}</Slot.Root>;
+  }
   return (
-    <Comp
-      className={cn(buttonVariants({ variant, size }), className)}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      {...props}
-    >
+    <button className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
       {loading && <Loader2 className="animate-spin" aria-hidden />}
       {children}
-    </Comp>
+    </button>
   );
 }
