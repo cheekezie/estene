@@ -1,3 +1,4 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Location from 'expo-location';
 import { Linking, Platform } from 'react-native';
 import { colors } from '@estene/theme/tokens';
@@ -6,6 +7,13 @@ import { api } from './api';
 import { HEARTBEAT_EVERY_MS } from './config';
 import { LOCATION_TASK, sendHeartbeat, stopSharing } from './location-task';
 import { session } from './session';
+
+/**
+ * Expo Go can't run background location (its Info.plist lacks the keys and
+ * background mode our build adds). There we only report while the app is open,
+ * via the timer in hooks/online.tsx. Real builds get full background sharing.
+ */
+const IN_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 export class PermissionError extends Error {
   constructor(
@@ -27,6 +35,7 @@ async function ensurePermissions() {
       'Allow location so Estene can send you nearby jobs.',
       !fg.canAskAgain,
     );
+  if (IN_EXPO_GO) return;
   const bg = await Location.requestBackgroundPermissionsAsync();
   if (bg.status !== 'granted')
     throw new PermissionError(
@@ -47,6 +56,10 @@ export async function goOnline() {
   // Report straight away so dispatch sees the rider immediately (also checks the account is active).
   const now = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
   await sendHeartbeat(now.coords);
+  if (IN_EXPO_GO) {
+    await session.setOnline(true);
+    return;
+  }
 
   await Location.startLocationUpdatesAsync(LOCATION_TASK, {
     accuracy: Location.Accuracy.Balanced,
@@ -74,7 +87,9 @@ export async function goOffline() {
 
 /** True when the background updates are actually running (the OS may have stopped them). */
 export const isSharing = () =>
-  Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
+  IN_EXPO_GO
+    ? session.isOnline()
+    : Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
 
 /** Best-effort current position for confirmations; undefined if unavailable within a few seconds. */
 export async function currentPoint(): Promise<GeoPoint | undefined> {

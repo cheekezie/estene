@@ -8,8 +8,8 @@ export function SiteFooter() {
         <div className="md:col-span-2">
           <Logo inverted />
           <p className="mt-4 max-w-sm text-sm leading-relaxed">
-            Parcel pickup and delivery across Abuja, to other states and by air — tagged, tracked
-            and handed over only to the right person.
+            Parcel pickup and delivery across Abuja, to other states and by air. Every parcel
+            tagged, tracked and handed over only to the right person.
           </p>
         </div>
         <div>

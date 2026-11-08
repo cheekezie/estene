@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   ActivityIndicator,
   Pressable,
@@ -138,14 +140,40 @@ export function Field({
   style,
   ...rest
 }: TextInputProps & { label: string; error?: string; hint?: string }) {
+  // Password fields get an eye button to show what was typed.
+  const secret = rest.secureTextEntry === true;
+  const [revealed, setRevealed] = useState(false);
   return (
     <View style={{ gap: space.xs }}>
       <Label>{label}</Label>
-      <TextInput
-        placeholderTextColor={colors.mutedForeground}
-        style={[s.input, error ? { borderColor: colors.destructive } : null, style]}
-        {...rest}
-      />
+      <View>
+        <TextInput
+          placeholderTextColor={colors.mutedForeground}
+          {...rest}
+          secureTextEntry={secret && !revealed}
+          style={[
+            s.input,
+            secret ? { paddingRight: 56 } : null,
+            error ? { borderColor: colors.destructive } : null,
+            style,
+          ]}
+        />
+        {secret ? (
+          <Pressable
+            onPress={() => setRevealed((r) => !r)}
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
+            hitSlop={8}
+            style={s.reveal}
+          >
+            <Ionicons
+              name={revealed ? 'eye-off-outline' : 'eye-outline'}
+              size={22}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
+      </View>
       {error ? (
         <T size={13} tone="danger">
           {error}
@@ -266,6 +294,15 @@ const s = StyleSheet.create({
     fontSize: 18,
     color: colors.foreground,
     backgroundColor: colors.card,
+  },
+  reveal: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notice: { borderRadius: radius.lg, borderWidth: 1, padding: space.md, gap: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

@@ -91,3 +91,13 @@ src/lib/                  API client (token refresh), location task, push, uploa
 
 `pnpm --filter @estene/rider typecheck` checks the types. `pnpm --filter @estene/rider doctor` checks
 the Expo setup.
+
+password rider1234:
+
+┌─────────────┬─────────────────────────────────────────┐
+│ Phone │ Rider │
+├─────────────┼─────────────────────────────────────────┤
+│ 08030000001 │ Company rider (rides an Estene vehicle) │
+├─────────────┼─────────────────────────────────────────┤
+│ 08030000002 │ Partner rider (Swift Riders Ltd fleet) │
+└─────────────┴─────────────────────────────────────────┘
