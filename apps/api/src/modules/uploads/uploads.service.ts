@@ -6,15 +6,15 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { UploadRequest, UploadTicketDto } from '@estene/contracts/upload';
 import { MAX_UPLOAD_BYTES } from '@estene/contracts/upload';
-import { env } from '../../config/env';
+import { env, useR2 } from '../../config/env';
 import { badRequest, notFound } from '../../lib/errors';
 
 /**
  * Direct-to-storage uploads. The API never streams photos through itself in
  * production: it hands out a short-lived PUT URL for one object, and the
- * client uploads straight to the bucket (Cloudflare R2; any S3-compatible store works).
+ * client uploads straight to the Cloudflare R2 bucket (R2 speaks the S3 API, hence the AWS SDK).
  *
- * `local` mimics that in development: the PUT URL points back at this API,
+ * Without R2 settings (development only) the API mimics that: the PUT URL points back at it,
  * signed with an HMAC, and files land in apps/api/.uploads.
  */
 const TICKET_TTL_S = 10 * 60;
@@ -25,14 +25,14 @@ const EXT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-let s3: S3Client | null = null;
-const s3Client = () =>
-  (s3 ??= new S3Client({
-    endpoint: env.S3_ENDPOINT,
-    region: env.S3_REGION,
+let r2: S3Client | null = null;
+const r2Client = () =>
+  (r2 ??= new S3Client({
+    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    region: 'auto',
     credentials: {
-      accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
-      secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
+      accessKeyId: env.R2_ACCESS_KEY_ID ?? '',
+      secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? '',
     },
     // R2 addresses buckets by path on its account endpoint.
     forcePathStyle: true,
@@ -51,9 +51,7 @@ function newKey(purpose: string, contentType: string) {
 
 const trimSlash = (s: string) => s.replace(/\/+$/, '');
 const publicBase = () =>
-  env.STORAGE_PROVIDER === 's3'
-    ? trimSlash(env.S3_PUBLIC_URL ?? '')
-    : `${trimSlash(env.API_PUBLIC_URL)}/api/uploads/files`;
+  useR2 ? trimSlash(env.R2_PUBLIC_URL ?? '') : `${trimSlash(env.API_PUBLIC_URL)}/api/uploads/files`;
 
 // ── Local (development) signing ──
 const localSignature = (key: string, contentType: string, size: number, exp: number) =>
@@ -67,11 +65,11 @@ export const UploadsService = {
     const expiresAt = new Date(Date.now() + TICKET_TTL_S * 1000);
     const fileUrl = `${publicBase()}/${key}`;
 
-    if (env.STORAGE_PROVIDER === 's3') {
+    if (useR2) {
       const uploadUrl = await getSignedUrl(
-        s3Client(),
+        r2Client(),
         new PutObjectCommand({
-          Bucket: env.S3_BUCKET,
+          Bucket: env.R2_BUCKET,
           Key: key,
           ContentType: req.contentType,
           ContentLength: req.size,
@@ -113,7 +111,7 @@ export const UploadsService = {
     return url.startsWith(`${publicBase()}/`);
   },
 
-  // ── Local provider endpoints (development only) ──
+  // ── Disk stand-in endpoints (development without R2) ──
 
   async saveLocal(
     q: { key: string; ct: string; size: string; exp: string; sig: string },

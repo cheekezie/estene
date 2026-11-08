@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import mongoose from 'mongoose';
-import { env, isProd } from './config/env';
+import { env, isProd, useR2 } from './config/env';
 import { AppError } from './lib/errors';
 import { redis } from './lib/redis';
 import { authPlugin } from './plugins/auth';
@@ -114,8 +114,7 @@ export async function buildApp() {
   await app.register(gatewayWebhookRoutes, { prefix: '/api/public' });
   if (env.PAYMENTS_PROVIDER === 'simulator')
     await app.register(simulatorRoutes, { prefix: '/api/public' });
-  if (env.STORAGE_PROVIDER === 'local')
-    await app.register(localUploadRoutes, { prefix: '/api/uploads' });
+  if (!useR2) await app.register(localUploadRoutes, { prefix: '/api/uploads' });
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
   await app.register(integrationRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });

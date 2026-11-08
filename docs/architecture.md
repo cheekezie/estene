@@ -101,7 +101,7 @@ with the pricing version.
 - **Photos:** `POST /rider/uploads` returns a short-lived PUT URL for one object (`modules/uploads`).
   The phone uploads straight to the Cloudflare R2 bucket, then sends `photoUrl`. Files are read from
   the bucket's public custom domain under random keys. Proof URLs must point at our
-  storage. `STORAGE_PROVIDER=local` stands in for a bucket in development.
+  storage. Without R2 settings (development only), photos are kept on disk under `apps/api/.uploads`.
 - **Money:** `/rider/earnings`, `/rider/payouts` and `/rider/history`.
 
 ### Shipment channels and business clients
