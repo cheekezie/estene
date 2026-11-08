@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1f47d6"/><rect x="9" y="8" width="13" height="3.2" rx="1.6" fill="#fff"/><rect x="9" y="14.4" width="16" height="3.2" rx="1.6" fill="#ffac20"/><rect x="9" y="20.8" width="13" height="3.2" rx="1.6" fill="#fff"/><rect x="9" y="8" width="3.2" height="16" rx="1.6" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600"><circle cx="300" cy="300" r="300" fill="#3230aa"/>
+  <g fill="#fbd23a">
+    <polygon points="176,184 284,184 276,216 152,216"/>
+    <polygon points="112,276 264,276 256,306 88,306"/>
+    <polygon points="48,360 346,360 342,392 24,392"/>
+  </g>
+  <g fill="#ffffff">
+    <polygon points="328,108 462,108 450,138 326,138"/>
+    <polygon points="332,138 376,138 336,318 292,318"/>
+    <polygon points="326,186 440,186 430,214 318,214"/>
+    <polygon points="426,230 478,230 462,290 410,290"/>
+    <polygon points="292,288 462,288 456,318 292,318"/>
+    <polygon points="414,318 458,318 434,412 390,412"/>
+    <polygon points="392,412 510,412 514,398 526,398 514,442 388,442"/>
+  </g></svg>

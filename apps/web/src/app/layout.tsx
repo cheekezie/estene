@@ -10,12 +10,17 @@ const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope', displa
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
-  title: { default: 'Estene — Parcel delivery across Abuja', template: '%s · Estene' },
-  description: 'Send parcels across Abuja with tracked pickup, QR-tagged handling and PIN-secured delivery. Instant quotes, same-day options.',
+  title: {
+    default: 'Estene — Parcel delivery across Abuja, interstate and by air',
+    template: '%s · Estene',
+  },
+  description:
+    'Send parcels across Abuja, to other states by road, or by flight. Tracked pickup, QR-tagged handling and PIN-secured delivery. Instant quotes, same-day options.',
   openGraph: { type: 'website', siteName: 'Estene Logistics', locale: 'en_NG' },
+  twitter: { card: 'summary_large_image' },
 };
 
-export const viewport: Viewport = { themeColor: '#1f47d6' };
+export const viewport: Viewport = { themeColor: '#3230aa' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

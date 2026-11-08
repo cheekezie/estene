@@ -147,6 +147,16 @@ const OFFICES = [
     location: { lng: 7.4917, lat: 9.0349 },
   },
   {
+    // Demo details — edit in Admin → Offices.
+    code: 'ABJ-MRB',
+    name: 'Mararaba Collection Office',
+    zone: 'NYN',
+    area: 'Mararaba',
+    address: '12 Abacha Road, Mararaba',
+    phone: '+2348090000103',
+    location: { lng: 7.5935, lat: 9.0108 },
+  },
+  {
     code: 'LOS-IKJ',
     name: 'Ikeja Office',
     zone: 'IKJ',
@@ -239,6 +249,7 @@ async function seed() {
   // One counter login per office for local testing (password = seed admin password).
   for (const [code, email] of [
     ['ABJ-WSE', 'office.wuse@estene.ng'],
+    ['ABJ-MRB', 'office.mararaba@estene.ng'],
     ['LOS-IKJ', 'office.ikeja@estene.ng'],
   ] as const) {
     await AdminModel.updateOne(
@@ -255,7 +266,7 @@ async function seed() {
       { upsert: true },
     );
   }
-  console.log(`✓ ${OFFICES.length} offices + 2 office agent logins`);
+  console.log(`✓ ${OFFICES.length} offices + 3 office agent logins`);
 
   await PricingConfigModel.updateOne(
     { key: 'default' },

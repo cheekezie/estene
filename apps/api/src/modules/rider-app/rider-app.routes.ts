@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ObjectIdSchema } from '@estene/contracts/common';
+import { ChangePasswordSchema } from '@estene/contracts/auth';
+import { ObjectIdSchema, PaginationQuerySchema } from '@estene/contracts/common';
+import { UploadRequestSchema } from '@estene/contracts/upload';
 import { ConfirmDeliverySchema, ConfirmPickupSchema } from '@estene/contracts/shipment';
-import { RiderHeartbeatSchema } from '@estene/contracts/rider';
+import { RiderHeartbeatSchema, RiderPushTokenSchema } from '@estene/contracts/rider';
 import { SHIPMENT_STATUSES } from '@estene/contracts/enums';
-import { forbidden } from '../../lib/errors';
+import { badRequest, forbidden } from '../../lib/errors';
 import { parse, send } from '../../lib/response';
 import { requireActor } from '../../plugins/auth';
 import { DispatchService } from '../dispatch/dispatch.service';
@@ -14,6 +16,14 @@ import { RiderModel } from '../riders/models/rider.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { PaymentsService } from '../payments/payments.service';
 import { PresenceService } from '../riders/presence.service';
+import { PayoutsService } from '../payouts/payouts.service';
+import { UploadsService } from '../uploads/uploads.service';
+
+/** Proof photos must be files we issued an upload for, not any link on the internet. */
+function assertOurPhoto(photoUrl: string | undefined) {
+  if (photoUrl && !UploadsService.isOurFile(photoUrl))
+    throw badRequest('Upload the photo through the app', 'PHOTO_NOT_UPLOADED');
+}
 
 const IdParams = z.object({ id: ObjectIdSchema });
 
@@ -23,6 +33,59 @@ export async function riderAppRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireActor('rider'));
 
   app.get('/me', async (req, reply) => send(reply, await RidersService.get(req.user.sub)));
+
+  app.post(
+    '/me/password',
+    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
+    async (req, reply) =>
+      send(
+        reply,
+        await RidersService.changePassword(req.user.sub, parse(ChangePasswordSchema, req.body)),
+        200,
+        'Password changed',
+      ),
+  );
+
+  // ── Push notifications ──────────────────────────────────────────────────
+  app.post('/push-token', async (req, reply) =>
+    send(
+      reply,
+      await RidersService.savePushToken(req.user.sub, parse(RiderPushTokenSchema, req.body)),
+    ),
+  );
+  /** Signing out on this phone: stop sending it offers. */
+  app.post('/push-token/clear', async (req, reply) => {
+    const { token } = parse(z.object({ token: z.string().min(1).max(200) }), req.body);
+    return send(reply, await RidersService.clearPushToken(req.user.sub, token));
+  });
+
+  // ── Photos ──────────────────────────────────────────────────────────────
+  app.post(
+    '/uploads',
+    { config: { rateLimit: { max: 30, timeWindow: '10 minutes' } } },
+    async (req, reply) =>
+      send(reply, await UploadsService.createTicket(parse(UploadRequestSchema, req.body)), 201),
+  );
+
+  // ── Money and history ───────────────────────────────────────────────────
+  app.get('/earnings', async (req, reply) =>
+    send(reply, await PayoutsService.riderEarnings(req.user.sub)),
+  );
+  app.get('/payouts', async (req, reply) =>
+    send(
+      reply,
+      await PayoutsService.list({
+        ...parse(PaginationQuerySchema, req.query),
+        riderId: req.user.sub,
+      }),
+    ),
+  );
+  app.get('/history', async (req, reply) =>
+    send(
+      reply,
+      await ShipmentsService.riderHistory(req.user.sub, parse(PaginationQuerySchema, req.query)),
+    ),
+  );
 
   // ── Presence ────────────────────────────────────────────────────────────
   app.post(
@@ -73,9 +136,11 @@ export async function riderAppRoutes(app: FastifyInstance) {
 
   app.post('/jobs/:id/pickup', async (req, reply) => {
     const { id } = parse(IdParams, req.params);
+    const input = parse(ConfirmPickupSchema, req.body);
+    assertOurPhoto(input.photoUrl);
     return send(
       reply,
-      await ShipmentsService.confirmPickup(id, req.user.sub, parse(ConfirmPickupSchema, req.body)),
+      await ShipmentsService.confirmPickup(id, req.user.sub, input),
       200,
       'Parcel picked up',
     );
@@ -118,13 +183,11 @@ export async function riderAppRoutes(app: FastifyInstance) {
 
   app.post('/jobs/:id/deliver', async (req, reply) => {
     const { id } = parse(IdParams, req.params);
+    const input = parse(ConfirmDeliverySchema, req.body);
+    assertOurPhoto(input.photoUrl);
     return send(
       reply,
-      await ShipmentsService.confirmDelivery(
-        id,
-        req.user.sub,
-        parse(ConfirmDeliverySchema, req.body),
-      ),
+      await ShipmentsService.confirmDelivery(id, req.user.sub, input),
       200,
       'Delivered',
     );

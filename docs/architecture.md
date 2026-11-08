@@ -85,6 +85,24 @@ with the pricing version.
 - **Delivery:** the rider rescans the tag (it must match), then proves delivery with the recipient's
   **PIN** (5 attempts, then photo only) or a **photo**. The PIN reaches the recipient by SMS at
   `out_for_delivery`.
+- **GPS on confirm:** pickup and delivery confirmations carry the rider's position. Delivery stores it
+  in `proof.location`. Either one fills the stop's coordinates when the booking had none, since most
+  bookings are address-only.
+
+### Rider app (`apps/rider`, Expo, iOS and Android)
+
+- **No in-app map.** Each stop shows the address and landmark, a Call button and a **Navigate** button
+  that opens Google Maps directions (to the coordinates when known, else the address).
+- **Location:** while Online, background location posts `/rider/presence/heartbeat` about every 20 s.
+  Dispatch only offers jobs to riders it can place nearby.
+- **Offers:** `dispatch.offered` → the `push` queue → Expo push to every phone the rider signed in on
+  (`/rider/push-token`). Tokens Expo reports as unregistered are removed. The app also polls
+  `/rider/offers` while open.
+- **Photos:** `POST /rider/uploads` returns a short-lived PUT URL for one object (`modules/uploads`).
+  The phone uploads straight to the Cloudflare R2 bucket, then sends `photoUrl`. Files are read from
+  the bucket's public custom domain under random keys. Proof URLs must point at our
+  storage. `STORAGE_PROVIDER=local` stands in for a bucket in development.
+- **Money:** `/rider/earnings`, `/rider/payouts` and `/rider/history`.
 
 ### Shipment channels and business clients
 
@@ -239,14 +257,14 @@ Rider balance = earnings − payouts − cash held.
 
 **Next:** fleet partners. Companies bring their own riders and bikes, with a fleet portal for trips, earnings, heatmaps and live location. See [`plans/fleet-partners.md`](plans/fleet-partners.md).
 
-1. **Rider app** (`apps/rider`, Expo):
-   - login, online toggle with background location heartbeat, offer card with countdown
-   - QR scan for pickup and delivery, PIN entry, photo capture
-2. **Uploads:** presigned R2/S3 URLs for delivery photos and rider KYC documents.
+1. **Rider app, next:** publish to the Play Store and App Store; rider KYC document uploads;
+   offline queue for scans made without signal.
+2. **Booking pins:** let senders drop a map pin (or share their location) when booking, so riders
+   navigate to coordinates from the first trip.
 3. **Payments:** run a test payment and payout on SaukiPay. Then add fleet payouts.
 4. **Customer accounts:** phone OTP sign-in, shipment history, saved addresses.
 5. **Live ops map:** Socket.IO and map tiles in the admin, plus a rider live view.
-6. **Notifications:** WhatsApp and email channels, and push for riders.
+6. **Notifications:** WhatsApp and email channels.
 7. **Client portal, next:** self-serve API keys, webhook settings, the delivery log and
    invoices;
    a sandbox (`est_test_` keys against seeded data); IP-pinned webhook sends to close the

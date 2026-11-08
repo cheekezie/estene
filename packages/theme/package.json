@@ -2,6 +2,15 @@
   "name": "@estene/theme",
   "version": "0.0.0",
   "private": true,
-  "description": "Brand tokens and base styles. CSS only.",
-  "exports": { "./globals.css": "./src/globals.css" }
+  "description": "Brand tokens, base styles and logo files.",
+  "exports": {
+    "./globals.css": "./src/globals.css",
+    "./tokens": "./src/tokens.ts"
+  },
+  "devDependencies": {
+    "sharp": "0.35.5"
+  },
+  "scripts": {
+    "brand": "node brand/generate.mjs"
+  }
 }

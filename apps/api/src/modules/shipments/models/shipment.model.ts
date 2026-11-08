@@ -85,7 +85,14 @@ export interface IShipment {
   /** Recipient delivery PIN, AES-GCM encrypted so it can be re-sent. Never returned by the API. */
   pinCipher: string;
   pinAttempts: number;
-  proof?: { method: DeliveryProofMethod; photoUrl?: string; receivedBy?: string; at: Date };
+  proof?: {
+    method: DeliveryProofMethod;
+    photoUrl?: string;
+    receivedBy?: string;
+    /** The rider's GPS when they confirmed delivery. */
+    location?: { lat: number; lng: number };
+    at: Date;
+  };
   dispatch: { state: DispatchState; attempts: number; declinedBy: Types.ObjectId[] };
   senderEmail?: string;
   notes?: string;
@@ -172,6 +179,7 @@ const shipmentSchema = new Schema<IShipment>(
       method: { type: String, enum: DELIVERY_PROOF_METHODS },
       photoUrl: String,
       receivedBy: String,
+      location: { lat: Number, lng: Number },
       at: Date,
     },
     dispatch: {

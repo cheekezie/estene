@@ -1,11 +1,17 @@
 import bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
-import type { RiderDto, RiderInput, RiderUpdateInput } from '@estene/contracts/rider';
+import type { ChangePasswordInput } from '@estene/contracts/auth';
+import type {
+  RiderDto,
+  RiderInput,
+  RiderPushTokenInput,
+  RiderUpdateInput,
+} from '@estene/contracts/rider';
 import type { RiderStatus } from '@estene/contracts/enums';
 import { ACTIVE_RIDER_STATUSES } from '@estene/contracts/shipment-status';
 import { randomCode, randomToken } from '../../lib/crypto';
 import { searchRegex } from '../../lib/db';
-import { conflict, notFound } from '../../lib/errors';
+import { badRequest, conflict, notFound } from '../../lib/errors';
 import { paginate } from '../../lib/response';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { RiderModel, type IRider } from './models/rider.model';
@@ -62,6 +68,48 @@ async function decorate(riders: IRider[]) {
 }
 
 export const RidersService = {
+  /** The rider changes their own password (they must know the current one). */
+  async changePassword(riderId: string, input: ChangePasswordInput) {
+    const rider = await RiderModel.findById(riderId).select('+passwordHash');
+    if (!rider) throw notFound('Rider not found');
+    if (!(await bcrypt.compare(input.currentPassword, rider.passwordHash)))
+      throw badRequest('Your current password is incorrect', 'WRONG_PASSWORD');
+    rider.passwordHash = await bcrypt.hash(input.newPassword, 12);
+    await rider.save();
+    return null;
+  },
+
+  /**
+   * Remembers this phone's push token. A token belongs to one phone, so it's
+   * removed from any other rider first (a shared phone changing hands).
+   */
+  async savePushToken(riderId: string, { token, platform }: RiderPushTokenInput) {
+    await RiderModel.updateMany(
+      { _id: { $ne: riderId }, 'pushTokens.token': token },
+      { $pull: { pushTokens: { token } } },
+    );
+    await RiderModel.updateOne({ _id: riderId }, { $pull: { pushTokens: { token } } });
+    await RiderModel.updateOne(
+      { _id: riderId },
+      // Newest first, at most 3 phones per rider.
+      {
+        $push: {
+          pushTokens: {
+            $each: [{ token, platform, updatedAt: new Date() }],
+            $position: 0,
+            $slice: 3,
+          },
+        },
+      },
+    );
+    return null;
+  },
+
+  async clearPushToken(riderId: string, token: string) {
+    await RiderModel.updateOne({ _id: riderId }, { $pull: { pushTokens: { token } } });
+    return null;
+  },
+
   async list(q: {
     page: number;
     limit: number;

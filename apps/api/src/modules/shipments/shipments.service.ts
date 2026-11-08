@@ -1,3 +1,4 @@
+import type { GeoPoint } from '@estene/contracts/common';
 import { Types, type FilterQuery, type UpdateQuery } from 'mongoose';
 import {
   isPrepaid,
@@ -140,6 +141,17 @@ async function resolveRoute(input: NewShipmentInput) {
  * binds a fresh QR tag, confirms size/weight and re-prices with the same
  * rules as the booking (a change needs a reason). Releases the tag on failure.
  */
+/**
+ * Bookings rarely carry coordinates, so the rider's GPS at a confirmed pickup
+ * or delivery fills them in — only when the stop has none (a booked pin wins).
+ */
+async function fillStopLocation(shipmentId: string, stop: 'pickup' | 'dropoff', point: GeoPoint) {
+  await ShipmentModel.updateOne(
+    { _id: shipmentId, [`${stop}.location.coordinates`]: { $exists: false } },
+    { $set: { [`${stop}.location`]: { type: 'Point', coordinates: [point.lng, point.lat] } } },
+  );
+}
+
 async function acceptParcel(
   shipment: ShipmentDoc,
   to: ShipmentStatus,
@@ -528,7 +540,9 @@ export const ShipmentsService = {
     if (shipment.status === 'assigned')
       await transition(shipmentId, 'en_route_to_pickup', { type: 'rider', id: riderId });
 
-    return acceptParcel(shipment, 'picked_up', { type: 'rider', id: riderId }, input);
+    const result = await acceptParcel(shipment, 'picked_up', { type: 'rider', id: riderId }, input);
+    if (input.location) await fillStopLocation(shipmentId, 'pickup', input.location);
+    return result;
   },
 
   async advance(shipmentId: string, riderId: string, to: ShipmentStatus, note?: string) {
@@ -568,6 +582,7 @@ export const ShipmentsService = {
               method: input.method,
               photoUrl: input.photoUrl,
               receivedBy: input.receivedBy,
+              location: input.location,
               at: new Date(),
             },
           },
@@ -581,6 +596,7 @@ export const ShipmentsService = {
         },
       },
     );
+    if (input.location) await fillStopLocation(shipmentId, 'dropoff', input.location);
     return toShipmentDto(updated);
   },
 
@@ -620,6 +636,26 @@ export const ShipmentsService = {
       .populate(SHIPMENT_POPULATE)
       .sort({ assignedAt: 1 });
     return shipments.map(toShipmentDto);
+  },
+
+  /** The rider's finished jobs, newest first — the app's "Recent jobs" list. */
+  async riderHistory(riderId: string, q: { page: number; limit: number }) {
+    // A finished leg (delivered, or handed in at an office), or a delivery that didn't happen.
+    const filter = {
+      $or: [
+        { 'riderLegs.rider': riderId },
+        { rider: riderId, status: { $in: ['delivery_failed', 'returned'] } },
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      ShipmentModel.find(filter)
+        .populate(SHIPMENT_POPULATE)
+        .sort({ updatedAt: -1 })
+        .skip((q.page - 1) * q.limit)
+        .limit(q.limit),
+      ShipmentModel.countDocuments(filter),
+    ]);
+    return paginate(rows.map(toShipmentDto), total, q.page, q.limit);
   },
 
   /** Plaintext PIN — only ever handed to the notification layer, never to an HTTP response. */

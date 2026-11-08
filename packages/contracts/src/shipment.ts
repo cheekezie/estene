@@ -20,6 +20,7 @@ import {
 } from './enums';
 import {
   GeoPointSchema,
+  type GeoPoint,
   NigerianPhoneSchema,
   ObjectIdSchema,
   PaginationQuerySchema,
@@ -170,6 +171,8 @@ export const ConfirmPickupSchema = z.object({
   description: z.string().trim().min(3).max(200).optional(),
   adjustmentReason: z.string().trim().min(5).max(300).optional(),
   photoUrl: z.url().optional(),
+  /** Where the rider was when confirming — saved on the stop if it has no coordinates yet. */
+  location: GeoPointSchema.optional(),
 });
 export type ConfirmPickupInput = z.infer<typeof ConfirmPickupSchema>;
 
@@ -184,6 +187,8 @@ export const ConfirmDeliverySchema = z
       .optional(),
     photoUrl: z.url().optional(),
     receivedBy: z.string().trim().max(80).optional(),
+    /** Where the rider was when confirming — saved on the stop if it has no coordinates yet. */
+    location: GeoPointSchema.optional(),
   })
   .refine((d) => (d.method === 'pin' ? !!d.pin : !!d.photoUrl), {
     message: 'Provide the recipient PIN or a delivery photo',
@@ -239,7 +244,14 @@ export type ShipmentDto = {
   adjustment?: { from: number; to: number; reason?: string; at: string };
   rider?: { id: string; name: string; phone: string; code: string } | null;
   tagCode?: string;
-  proof?: { method: DeliveryProofMethod; photoUrl?: string; receivedBy?: string; at: string };
+  proof?: {
+    method: DeliveryProofMethod;
+    photoUrl?: string;
+    receivedBy?: string;
+    /** Where the rider was when they confirmed delivery. */
+    location?: GeoPoint;
+    at: string;
+  };
   /** Warehousing order this shipment was packed from. */
   order: { id: string; number: string } | null;
   events: ShipmentEventDto[];
@@ -333,7 +345,16 @@ export type IntegrationShipmentDto = {
   updatedAt: string;
 };
 
-type OfficeRef = { id: string; name: string; code: string; city: string };
+type OfficeRef = {
+  id: string;
+  name: string;
+  code: string;
+  city: string;
+  address: string;
+  landmark?: string;
+  /** Set when the office has a map pin — riders navigate to it. */
+  location?: GeoPoint;
+};
 
 export type FulfilmentDto = {
   originMode: OriginMode;

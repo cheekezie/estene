@@ -74,3 +74,18 @@ export type RiderDto = {
   activeJobs: number;
   createdAt: string;
 };
+
+// ── Rider app ───────────────────────────────────────────────────────────────
+
+/** The app registers its Expo push token so job offers reach a locked phone. */
+export const RiderPushTokenSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .regex(/^Expo(nent)?PushToken\[.+\]$/, 'Not an Expo push token'),
+  platform: z.enum(['ios', 'android']),
+});
+export type RiderPushTokenInput = z.infer<typeof RiderPushTokenSchema>;
+
+/** Data sent with an offer push, so tapping it opens the offer. */
+export type RiderPushData = { type: 'offer'; offerId: string; shipmentId: string };

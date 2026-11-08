@@ -15,7 +15,7 @@
     "@estene/ui": "workspace:*",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.544.0",
-    "next": "^16.4.0",
+    "next": "^16.4.5",
     "radix-ui": "^1.4.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

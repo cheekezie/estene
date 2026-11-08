@@ -34,6 +34,8 @@ export interface IRider {
     verifiedAt: Date;
   };
   onboardedBy?: Types.ObjectId;
+  /** Expo push tokens, one per signed-in phone — job offers are pushed to these. */
+  pushTokens: { token: string; platform: 'ios' | 'android'; updatedAt: Date }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +64,18 @@ const riderSchema = new Schema<IRider>(
       verifiedAt: Date,
     },
     onboardedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
+    pushTokens: {
+      type: [
+        {
+          _id: false,
+          token: { type: String, required: true },
+          platform: { type: String, enum: ['ios', 'android'], required: true },
+          updatedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      select: false,
+    },
   },
   { timestamps: true },
 );

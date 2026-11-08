@@ -18,6 +18,7 @@ export const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(8, 'Password must be at least 8 characters'),
 });
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 
 /** Claims carried in the access token. Kept small — no PII beyond the id. */
 export type TokenClaims = {

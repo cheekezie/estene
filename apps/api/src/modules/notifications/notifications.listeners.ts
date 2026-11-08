@@ -7,6 +7,10 @@ import { StockLevelModel } from '../warehousing/models/stock-level.model';
 import { PaymentModel } from '../payments/models/payment.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
+import type { RiderPushData } from '@estene/contracts/rider';
+import { RiderModel } from '../riders/models/rider.model';
+import { DispatchOfferModel } from '../dispatch/models/dispatch-offer.model';
+import { sendPush, type PushMessage } from './channels/push';
 import { sms } from './channels/sms';
 import { NotificationLogModel } from './models/notification-log.model';
 import { templates } from './notifications.templates';
@@ -16,6 +20,10 @@ const QUEUE = 'notifications';
 type SmsJob = { to: string; body: string; template: string; shipmentId?: string };
 
 const queueSms = (job: SmsJob) => getQueue(QUEUE).add('sms', job);
+
+/** Pushes to riders are time-critical (a 45-second offer), so they get their own queue. */
+const PUSH_QUEUE = 'push';
+type PushJob = { riderId: string; messages: PushMessage[] };
 
 /**
  * Turns shipment milestones into customer messages. Listeners only decide
@@ -163,6 +171,48 @@ export function registerNotifications() {
       ),
       template: 'client.low_stock',
     });
+  });
+
+  // A job offer: wake the rider's phone. The app also polls while it's open.
+  bus.on('dispatch.offered', async ({ shipmentId, riderId, offerId, expiresAt }) => {
+    const [rider, shipment, offer] = await Promise.all([
+      RiderModel.findById(riderId, '+pushTokens').lean(),
+      ShipmentModel.findById(shipmentId, 'pickup.area dropoff.area').lean(),
+      DispatchOfferModel.findById(offerId, 'rank').lean(),
+    ]);
+    if (!rider?.pushTokens?.length || !shipment) return;
+    const ttl = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+    const distance = offer?.rank?.distanceKm;
+    const data: RiderPushData = { type: 'offer', offerId, shipmentId };
+    const messages = rider.pushTokens.map((t) => ({
+      to: t.token,
+      title: 'New delivery job',
+      body:
+        `${shipment.pickup?.area ?? 'Pickup'} → ${shipment.dropoff?.area ?? 'Drop-off'}` +
+        (distance != null ? ` · ${distance.toFixed(1)} km away` : '') +
+        ` · accept within ${ttl}s`,
+      data,
+      channelId: 'offers',
+      sound: 'default' as const,
+      priority: 'high' as const,
+      ttl,
+    }));
+    await getQueue(PUSH_QUEUE).add('offer', { riderId, messages } satisfies PushJob, {
+      attempts: 2,
+      backoff: { type: 'fixed', delay: 2000 },
+      removeOnComplete: true,
+    });
+  });
+
+  startWorker(PUSH_QUEUE, async (job) => {
+    const { riderId, messages } = job.data as PushJob;
+    const { deadTokens } = await sendPush(messages);
+    // Uninstalled app or revoked permission: stop pushing to that phone.
+    if (deadTokens.length)
+      await RiderModel.updateOne(
+        { _id: riderId },
+        { $pull: { pushTokens: { token: { $in: deadTokens } } } },
+      );
   });
 
   startWorker(QUEUE, async (job) => {

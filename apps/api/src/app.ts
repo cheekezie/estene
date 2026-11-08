@@ -18,6 +18,7 @@ import { officesRoutes } from './modules/offices/offices.routes';
 import { paymentsRoutes } from './modules/payments/payments.routes';
 import { payoutsRoutes } from './modules/payouts/payouts.routes';
 import { simulatorRoutes } from './modules/payments/simulator.routes';
+import { localUploadRoutes } from './modules/uploads/uploads.routes';
 import { gatewayWebhookRoutes } from './modules/payments/gateway-webhook.routes';
 import { portalRoutes } from './modules/portal/portal.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
@@ -113,6 +114,8 @@ export async function buildApp() {
   await app.register(gatewayWebhookRoutes, { prefix: '/api/public' });
   if (env.PAYMENTS_PROVIDER === 'simulator')
     await app.register(simulatorRoutes, { prefix: '/api/public' });
+  if (env.STORAGE_PROVIDER === 'local')
+    await app.register(localUploadRoutes, { prefix: '/api/uploads' });
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
   await app.register(integrationRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });

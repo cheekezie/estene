@@ -19,6 +19,7 @@
     "dev:admin": "turbo dev --filter @estene/admin",
     "dev:web": "turbo dev --filter @estene/web",
     "dev:portal": "turbo dev --filter @estene/portal",
+    "dev:rider": "pnpm --filter @estene/rider start",
     "build:api": "turbo build --filter @estene/api",
     "build:admin": "turbo build --filter @estene/admin",
     "build:web": "turbo build --filter @estene/web",

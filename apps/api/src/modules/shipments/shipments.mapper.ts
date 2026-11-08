@@ -20,7 +20,7 @@ export const SHIPMENT_POPULATE = [
   ...(['fulfilment.originOffice', 'fulfilment.destinationOffice', 'currentOffice'] as const).map(
     (path) => ({
       path,
-      select: 'name code zone address landmark phone openingHours',
+      select: 'name code zone address landmark location phone openingHours',
       populate: { path: 'zone', select: 'city state' },
     }),
   ),
@@ -36,13 +36,24 @@ type OfficeRef = {
   landmark?: string;
   phone: string;
   openingHours: string;
+  location?: { coordinates?: [number, number] };
   zone?: { city?: string };
 };
 const asOffice = (v: unknown) =>
   v && typeof v === 'object' && 'code' in v ? (v as OfficeRef) : null;
 const officeRef = (v: unknown) => {
   const o = asOffice(v);
-  return o ? { id: o._id.toString(), name: o.name, code: o.code, city: o.zone?.city ?? '' } : null;
+  if (!o) return null;
+  const [lng, lat] = o.location?.coordinates ?? [];
+  return {
+    id: o._id.toString(),
+    name: o.name,
+    code: o.code,
+    city: o.zone?.city ?? '',
+    address: o.address,
+    landmark: o.landmark,
+    location: lat != null && lng != null ? { lat, lng } : undefined,
+  };
 };
 
 export function toFulfilmentDto(o: IShipment): ShipmentDto['fulfilment'] {
@@ -118,7 +129,18 @@ export function toShipmentDto(o: IShipment): ShipmentDto {
         }
       : null,
     tagCode: o.tagCode,
-    proof: o.proof?.at ? { ...o.proof, at: o.proof.at.toISOString() } : undefined,
+    proof: o.proof?.at
+      ? {
+          method: o.proof.method,
+          photoUrl: o.proof.photoUrl,
+          receivedBy: o.proof.receivedBy,
+          location:
+            o.proof.location?.lat != null && o.proof.location?.lng != null
+              ? { lat: o.proof.location.lat, lng: o.proof.location.lng }
+              : undefined,
+          at: o.proof.at.toISOString(),
+        }
+      : undefined,
     events: o.events.map((e) => ({
       status: e.status,
       note: e.note,
