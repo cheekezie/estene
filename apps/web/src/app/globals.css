@@ -36,6 +36,27 @@
   animation: word-cycle 10s ease-in-out infinite both;
 }
 
+/* Three-word variant: each word holds a third of the cycle, still 2.5s apiece. */
+@keyframes word-cycle-3 {
+  0% {
+    opacity: 0;
+    transform: translateY(0.25em);
+  }
+  4%,
+  33% {
+    opacity: 1;
+    transform: none;
+  }
+  37%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.25em);
+  }
+}
+.word-cycle-3 {
+  animation: word-cycle-3 7.5s ease-in-out infinite both;
+}
+
 @keyframes ticker {
   to {
     transform: translateX(-50%);
@@ -66,11 +87,13 @@
     animation: none;
   }
   /* Show only the first word, still. */
-  .word-cycle {
+  .word-cycle,
+  .word-cycle-3 {
     animation: none;
     opacity: 0;
   }
-  .word-cycle:nth-child(2) {
+  .word-cycle:nth-child(2),
+  .word-cycle-3:nth-child(2) {
     opacity: 1;
   }
 }

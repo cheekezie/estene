@@ -6,14 +6,17 @@ import {
   KeyRound,
   MapPin,
   PackageCheck,
+  Plane,
   QrCode,
   Timer,
   Truck,
+  Warehouse,
 } from 'lucide-react';
 import { SERVICE_LEVELS, SERVICE_LEVEL_META } from '@estene/contracts/enums';
-import { AreaTicker } from '@/components/hero/AreaTicker';
+import { AreaTicker, type TickerItem } from '@/components/hero/AreaTicker';
 import { LiveCityMap } from '@/components/hero/LiveCityMap';
 import { RotatingWord } from '@/components/hero/RotatingWord';
+import type { PublicOfficeDto } from '@estene/contracts/office';
 import { publicApi, type PublicZone } from '@/lib/api';
 
 export const revalidate = 300;
@@ -31,6 +34,35 @@ const FALLBACK_AREAS = [
   'Apo',
   'Nyanya',
 ];
+
+const HOME_CITY = 'Abuja';
+const FALLBACK_CITIES = ['Lagos'];
+
+/**
+ * Abuja areas, with the cities we serve (Abuja, Lagos… from zones and offices) and
+ * "Across Nigeria" spread evenly through the strip so they show up throughout the loop.
+ */
+function tickerItems(zones: PublicZone[], offices: PublicOfficeDto[]): TickerItem[] {
+  const local = zones.filter((z) => z.city === HOME_CITY).flatMap((z) => z.areas);
+  const others = [
+    ...new Set([...zones, ...offices].map((x) => x.city).filter((c) => c && c !== HOME_CITY)),
+  ];
+  const highlights: TickerItem[] = [
+    { label: HOME_CITY, kind: 'city' },
+    ...(others.length ? others : FALLBACK_CITIES).map((label) => ({
+      label,
+      kind: 'city' as const,
+    })),
+    { label: 'Across Nigeria', kind: 'nationwide' },
+  ];
+
+  const items: TickerItem[] = (local.length ? local : FALLBACK_AREAS).map((label) => ({ label }));
+  const step = Math.max(2, Math.floor(items.length / highlights.length));
+  highlights.forEach((h, i) => {
+    items.splice(Math.min(items.length, i * (step + 1)), 0, h);
+  });
+  return items;
+}
 
 const STEPS = [
   {
@@ -55,6 +87,29 @@ const STEPS = [
   },
 ];
 
+const LONG_HAUL = [
+  {
+    icon: Truck,
+    title: 'Interstate delivery',
+    body: 'We move parcels from Abuja to other states by road and deliver them at the other end.',
+    points: [
+      'One tracking number from start to finish',
+      'SMS updates when it leaves and arrives',
+      'Handed over with the recipient’s PIN',
+    ],
+  },
+  {
+    icon: Plane,
+    title: 'Flight delivery',
+    body: 'When it can’t wait for the road, we send it by air for the fastest delivery to another city.',
+    points: [
+      'Best for urgent documents and small parcels',
+      'We collect it and take it to the airport',
+      'Tracked until the recipient has it',
+    ],
+  },
+];
+
 const SERVICE_ICON = { standard: Truck, express: Timer, same_day: PackageCheck } as const;
 
 async function loadZones(): Promise<PublicZone[]> {
@@ -65,8 +120,16 @@ async function loadZones(): Promise<PublicZone[]> {
   }
 }
 
+async function loadOffices(): Promise<PublicOfficeDto[]> {
+  try {
+    return await publicApi.offices();
+  } catch {
+    return [];
+  }
+}
+
 export default async function HomePage() {
-  const zones = await loadZones();
+  const [zones, offices] = await Promise.all([loadZones(), loadOffices()]);
 
   return (
     <>
@@ -77,16 +140,19 @@ export default async function HomePage() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-14 sm:px-6 md:pb-28 md:pt-20 lg:grid-cols-[1.1fr_1fr]">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-blue-100 ring-1 ring-white/15">
-              <span className="bg-accent size-1.5 rounded-full" /> Now delivering across Abuja
+              <span className="bg-accent size-1.5 rounded-full" /> Abuja, interstate and by air
             </p>
             <h1 className="font-display mt-5 text-[2.6rem] font-extrabold leading-[1.15] tracking-tight sm:text-6xl lg:text-[4.2rem]">
               Send <RotatingWord words={['documents', 'gifts', 'orders', 'anything']} />
               <br />
-              across Abuja.
+              across{' '}
+              {/* Slower than the line above and offset by half a beat, so the two never swap together. */}
+              <RotatingWord words={['Abuja.', 'Lagos.', 'Nigeria.']} interval={5} offset={1.25} />
             </h1>
             <p className="mt-6 max-w-xl text-lg text-blue-100/90">
-              A rider at your door in minutes. Every parcel QR-tagged, tracked live, and handed over
-              only with the recipient’s PIN.
+              A rider at your door in minutes, road delivery to other states and flight delivery
+              when it can’t wait. Every parcel QR-tagged, tracked live, and handed over only with
+              the recipient’s PIN.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -107,7 +173,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <AreaTicker areas={zones.length ? zones.flatMap((z) => z.areas) : FALLBACK_AREAS} />
+      <AreaTicker items={tickerItems(zones, offices)} />
 
       {/* Trust strip */}
       <section className="border-b bg-white">
@@ -176,6 +242,37 @@ export default async function HomePage() {
           <p className="mt-6 text-sm text-slate-500">
             Prices depend on route, parcel size and weight. You see the estimate before you book;
             the rider confirms it at pickup.
+          </p>
+        </div>
+      </section>
+
+      {/* Beyond Abuja */}
+      <section id="interstate" className="scroll-mt-20 bg-white py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <SectionTitle eyebrow="Beyond Abuja" title="Sending to another state? We go there too" />
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {LONG_HAUL.map(({ icon: Icon, title, body, points }) => (
+              <div key={title} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-7">
+                <div className="bg-primary grid size-11 place-items-center rounded-xl text-white">
+                  <Icon className="size-5" />
+                </div>
+                <h3 className="font-display mt-5 text-xl font-bold text-slate-900">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
+                <ul className="mt-5 space-y-2 text-sm text-slate-700">
+                  {points.map((p) => (
+                    <li key={p} className="flex items-start gap-2">
+                      <Check className="text-primary mt-0.5 size-4 shrink-0" />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 flex items-center gap-2 text-sm text-slate-500">
+            <Warehouse className="size-4" />
+            Have it picked up from your door or drop it at an Estene office. The recipient can get
+            it delivered or collect it at our office in their city.
           </p>
         </div>
       </section>
