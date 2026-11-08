@@ -16,6 +16,11 @@ const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
+      // Print views sit outside the app chrome.
+      {
+        path: 'warehouse/orders/:id/print',
+        ...page(() => import('@/features/warehouse/OrderPrintPage')),
+      },
       {
         element: <AppLayout />,
         children: [
@@ -38,6 +43,10 @@ const router = createBrowserRouter([
                 path: 'developer',
                 ...page(() => import('@/features/clients/ClientDeveloperPage')),
               },
+              {
+                path: 'warehousing',
+                ...page(() => import('@/features/clients/ClientWarehousingPage')),
+              },
             ],
           },
           { path: 'riders', ...page(() => import('@/features/riders/RidersPage')) },
@@ -50,6 +59,17 @@ const router = createBrowserRouter([
             path: 'manifests/:id',
             ...page(() => import('@/features/manifests/ManifestDetailPage')),
           },
+          { path: 'warehouse/stock', ...page(() => import('@/features/warehouse/StockPage')) },
+          { path: 'warehouse/orders', ...page(() => import('@/features/warehouse/OrdersPage')) },
+          {
+            path: 'warehouse/orders/new',
+            ...page(() => import('@/features/warehouse/NewOrderPage')),
+          },
+          {
+            path: 'warehouse/orders/:id',
+            ...page(() => import('@/features/warehouse/OrderDetailPage')),
+          },
+          { path: 'warehouse/inbound', ...page(() => import('@/features/warehouse/InboundPage')) },
           { path: 'tags', ...page(() => import('@/features/tags/TagsPage')) },
           { path: 'pricing', ...page(() => import('@/features/pricing/PricingPage')) },
           { path: 'finance', ...page(() => import('@/features/finance/FinancePage')) },

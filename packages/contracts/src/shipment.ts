@@ -240,6 +240,8 @@ export type ShipmentDto = {
   rider?: { id: string; name: string; phone: string; code: string } | null;
   tagCode?: string;
   proof?: { method: DeliveryProofMethod; photoUrl?: string; receivedBy?: string; at: string };
+  /** Warehousing order this shipment was packed from. */
+  order: { id: string; number: string } | null;
   events: ShipmentEventDto[];
   createdAt: string;
 };
@@ -325,6 +327,8 @@ export type IntegrationShipmentDto = {
     at: string;
   } | null;
   events: { status: ShipmentStatus; at: string; note: string | null }[];
+  /** Set when the shipment was packed from a warehousing order. */
+  order: { number: string; reference: string | null } | null;
   createdAt: string;
   updatedAt: string;
 };

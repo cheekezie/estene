@@ -18,7 +18,7 @@ import { ShipmentModel, type ShipmentDoc } from '../shipments/models/shipment.mo
 import { payableAmount } from '../shipments/shipments.mapper';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { PaymentModel, type IPayment, type PaymentDoc } from './models/payment.model';
-import { gateway } from './providers';
+import { gateway, gatewayFor } from './providers';
 
 /** Unpaid online bookings are cancelled after this long. */
 const BOOKING_PAYMENT_WINDOW_MS = 24 * 3_600_000;
@@ -196,7 +196,7 @@ export const PaymentsService = {
       amount,
       expiresAt: new Date(Date.now() + CHECKOUT_TTL_MS),
     });
-    const session = gateway.checkoutSession({
+    const session = await gateway.checkoutSession({
       reference: payment.reference,
       amount,
       customer: {
@@ -207,8 +207,14 @@ export const PaymentsService = {
       returnUrl: `${env.PUBLIC_SITE_URL}/pay/return?ref=${payment.reference}`,
     });
     payment.checkoutUrl = session.checkoutUrl;
+    if (session.providerReference) payment.providerReference = session.providerReference;
     await payment.save();
-    return session;
+    return {
+      reference: session.reference,
+      amount: session.amount,
+      provider: session.provider,
+      checkoutUrl: session.checkoutUrl,
+    };
   },
 
   /** A dedicated account number the customer transfers the outstanding amount into. Reuses a live one. */
@@ -226,11 +232,21 @@ export const PaymentsService = {
     });
     if (live) return toDto(live);
 
+    if (!gateway.createVirtualAccount)
+      throw badRequest(
+        'Bank transfer happens inside the online checkout with our payment provider — send the customer a pay link instead',
+        'TRANSFER_VIA_CHECKOUT',
+      );
     const reference = newReference();
     const account = await gateway.createVirtualAccount({
       reference,
       amount,
       accountName: `Estene ${shipment.trackingNumber}`,
+      customer: {
+        ...customerOf(shipment),
+        email:
+          shipment.senderEmail ?? `${shipment.trackingNumber.toLowerCase()}@customers.estene.ng`,
+      },
     });
     const payment = await createPayment(shipment, {
       reference,
@@ -243,13 +259,40 @@ export const PaymentsService = {
     return toDto(payment);
   },
 
+  /** Whether this gateway can issue one-off account numbers; otherwise transfers go through checkout. */
+  get issuesAccountNumbers() {
+    return !!gateway.createVirtualAccount;
+  },
+
+  /**
+   * Starts a prepaid booking's payment the way the customer asked: an account
+   * number for `transfer` when the gateway issues them, otherwise a hosted
+   * checkout (which itself offers bank transfer, card and USSD).
+   */
+  async startPayment(
+    shipmentId: string,
+    preferred: 'transfer' | 'checkout',
+    purpose?: PaymentPurpose,
+  ) {
+    return preferred === 'transfer' && this.issuesAccountNumbers
+      ? { transfer: await this.startTransfer(shipmentId, purpose) }
+      : { checkout: await this.startCheckout(shipmentId, purpose) };
+  },
+
   /** Asks the gateway for the authoritative status. Never trusts redirects or webhook bodies alone. */
   async verify(reference: string) {
     const payment = await PaymentModel.findOne({ reference });
     if (!payment) throw notFound('Payment not found');
     if (payment.status !== 'pending' || payment.provider === 'offline') return payment;
 
-    const result = await gateway.verify({ reference, amount: payment.amount });
+    // The gateway it started on, even if PAYMENTS_PROVIDER has since changed.
+    const started = gatewayFor(payment.provider);
+    if (!started) return payment; // old gateway's key removed — left pending for a manual check
+    const result = await started.verify({
+      reference,
+      providerReference: payment.providerReference,
+      amount: payment.amount,
+    });
     if (result.status === 'success') {
       if (result.amountPaid < payment.amount) {
         await PaymentModel.updateOne(
@@ -266,7 +309,13 @@ export const PaymentsService = {
         );
         return payment;
       }
-      return (await markSuccess(payment._id, result)) ?? payment;
+      return (
+        (await markSuccess(payment._id, {
+          providerReference: result.providerReference,
+          responseCode: result.responseCode,
+          responseDescription: result.responseDescription,
+        })) ?? payment
+      );
     }
     if (result.status === 'failed') {
       return PaymentModel.findOneAndUpdate(
@@ -329,9 +378,17 @@ export const PaymentsService = {
   async requestBalance(shipmentId: string) {
     const shipment = await loadShipment(shipmentId);
     if (!isPrepaid(shipment.paymentMethod) || outstanding(shipment) <= 0) return null;
-    const payment = await this.startTransfer(shipmentId, 'balance');
-    bus.emit('payment.balance_requested', { paymentId: payment.id, shipmentId });
-    return payment;
+    if (this.issuesAccountNumbers) {
+      const payment = await this.startTransfer(shipmentId, 'balance');
+      bus.emit('payment.balance_requested', { paymentId: payment.id, shipmentId });
+      return payment;
+    }
+    // No account numbers: the sender gets a link to pay the difference online.
+    const session = await this.startCheckout(shipmentId, 'balance');
+    const payment = await PaymentModel.findOne({ reference: session.reference }, '_id').lean();
+    if (payment)
+      bus.emit('payment.balance_requested', { paymentId: payment._id.toString(), shipmentId });
+    return null;
   },
 
   /** For the public tracking page: what's owed and the live account number, if any. */

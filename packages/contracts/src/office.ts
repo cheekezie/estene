@@ -18,6 +18,8 @@ export const OfficeInputSchema = z.object({
   openingHours: z.string().trim().max(120).default('Mon–Sat, 8am–6pm'),
   location: GeoPointSchema.optional(),
   isActive: z.boolean().default(true),
+  /** Holds business clients' stock for warehousing orders. */
+  isWarehouse: z.boolean().default(false),
 });
 export type OfficeInput = z.infer<typeof OfficeInputSchema>;
 

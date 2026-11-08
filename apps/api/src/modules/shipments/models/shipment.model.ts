@@ -54,6 +54,8 @@ export interface IShipment {
   client?: Types.ObjectId | null;
   /** The client's own shipment id; unique per client, used for idempotent API creates. */
   clientReference?: string;
+  /** Warehousing order this shipment was packed from. */
+  order?: Types.ObjectId | null;
   pickup: IStop;
   dropoff: IStop;
   parcel: {
@@ -138,6 +140,7 @@ const shipmentSchema = new Schema<IShipment>(
     source: { type: String, enum: SHIPMENT_SOURCES, required: true, default: 'web' },
     client: { type: Schema.Types.ObjectId, ref: 'Client', default: null },
     clientReference: String,
+    order: { type: Schema.Types.ObjectId, ref: 'Order', default: null },
     pickup: { type: stopSchema, required: true },
     dropoff: { type: stopSchema, required: true },
     parcel: {
@@ -220,6 +223,7 @@ shipmentSchema.index({ rider: 1, status: 1 });
 shipmentSchema.index({ 'pickup.zone': 1, status: 1 });
 shipmentSchema.index({ 'pickup.phone': 1, createdAt: -1 });
 shipmentSchema.index({ client: 1, createdAt: -1 });
+shipmentSchema.index({ order: 1 }, { partialFilterExpression: { order: { $type: 'objectId' } } });
 shipmentSchema.index(
   { client: 1, clientReference: 1 },
   { unique: true, partialFilterExpression: { clientReference: { $type: 'string' } } },

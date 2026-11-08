@@ -10,7 +10,10 @@ export async function tagsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireActor('admin'));
 
   app.get('/', async (req, reply) => {
-    const q = parse(PaginationQuerySchema.extend({ status: z.enum(['available', 'bound', 'void']).optional() }), req.query);
+    const q = parse(
+      PaginationQuerySchema.extend({ status: z.enum(['available', 'bound', 'void']).optional() }),
+      req.query,
+    );
     return send(reply, await TagsService.list(q.page, q.limit, q.status));
   });
 

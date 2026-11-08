@@ -1,9 +1,11 @@
 /**
  * Idempotent dev seed: super admin, Abuja launch zones, pricing, sample
- * route fares, two riders (one company, one partner) and a batch of tags.
+ * route fares, two riders (one company, one partner), a batch of tags and a
+ * warehousing client with stock at the Wuse office.
  *   pnpm seed
  */
 import bcrypt from 'bcryptjs';
+import { ClientUserModel } from '../modules/portal/models/client-user.model';
 import { DEFAULT_PRICING_CONFIG } from '@estene/contracts/pricing';
 import { env } from '../config/env';
 import { connectDB, disconnectDB } from '../lib/db';
@@ -16,6 +18,10 @@ import { ParcelTagModel } from '../modules/tags/models/parcel-tag.model';
 import { TagsService } from '../modules/tags/tags.service';
 import { ZoneModel } from '../modules/zones/models/zone.model';
 import { OfficeModel } from '../modules/offices/models/office.model';
+import { ClientModel } from '../modules/clients/models/client.model';
+import { ProductModel } from '../modules/warehousing/models/product.model';
+import { StockLevelModel } from '../modules/warehousing/models/stock-level.model';
+import { StockService } from '../modules/warehousing/stock.service';
 
 const ZONES = [
   {
@@ -169,6 +175,9 @@ const ROUTES: [string, string, number][] = [
 ];
 
 async function seed() {
+  // Demo riders and logins with known passwords must never reach a live database.
+  if (env.NODE_ENV === 'production' && !process.argv.includes('--allow-production'))
+    throw new Error('Refusing to seed demo data in production. Use create-admin instead.');
   await connectDB();
 
   const email = env.SEED_ADMIN_EMAIL ?? 'admin@estene.ng';
@@ -220,6 +229,8 @@ async function seed() {
         phone: o.phone,
         location: { type: 'Point', coordinates: [o.location.lng, o.location.lat] },
         isActive: true,
+        // Wuse doubles as the Abuja warehouse for store-and-ship clients.
+        isWarehouse: o.code === 'ABJ-WSE',
       },
       { upsert: true, new: true },
     );
@@ -298,6 +309,114 @@ async function seed() {
     const { batch } = await TagsService.generateBatch(50);
     console.log(`✓ 50 parcel tags (batch ${batch})`);
   }
+
+  // A store-and-ship client with a small catalogue already on the Wuse shelves.
+  const glow = await ClientModel.findOneAndUpdate(
+    { name: 'Naija Glow Skincare' },
+    {
+      $setOnInsert: {
+        name: 'Naija Glow Skincare',
+        industry: 'ecommerce',
+        contact: { name: 'Amaka Eze', phone: '+2348091112233', email: 'ops@naijaglow.ng' },
+        address: {
+          line: '5 Aminu Kano Crescent',
+          zone: zoneIds.WSE,
+          area: 'Wuse II',
+          city: 'Abuja',
+          state: 'FCT',
+        },
+        billing: { paymentTermsDays: 30 },
+        warehousing: {
+          enabled: true,
+          office: officeIds['ABJ-WSE'],
+          monthlyFee: 2_500_000,
+          lowStockThreshold: 5,
+          enabledAt: new Date(),
+        },
+      },
+    },
+    { upsert: true, new: true },
+  );
+  const catalogue = [
+    {
+      sku: 'SHEA-250',
+      name: 'Whipped shea butter 250ml',
+      size: 'small',
+      weightKg: 0.3,
+      declaredValue: 650_000,
+      qty: 40,
+      bin: 'A-01',
+    },
+    {
+      sku: 'SOAP-BLK',
+      name: 'African black soap',
+      size: 'small',
+      weightKg: 0.2,
+      declaredValue: 250_000,
+      qty: 60,
+      bin: 'A-02',
+    },
+    {
+      sku: 'OIL-ROSE',
+      name: 'Rosehip face oil 30ml',
+      size: 'envelope',
+      weightKg: 0.1,
+      declaredValue: 900_000,
+      qty: 4,
+      bin: 'B-01',
+      fragile: true,
+    },
+    {
+      sku: 'GIFT-BOX',
+      name: 'Glow gift box',
+      size: 'medium',
+      weightKg: 1.2,
+      declaredValue: 2_200_000,
+      qty: 12,
+      bin: 'C-01',
+    },
+  ] as const;
+  for (const { qty, bin, ...p } of catalogue) {
+    const product = await ProductModel.findOneAndUpdate(
+      { client: glow._id, sku: p.sku },
+      { $setOnInsert: { ...p, client: glow._id } },
+      { upsert: true, new: true },
+    );
+    await StockService.add(
+      glow._id,
+      glow.warehousing!.office,
+      product._id,
+      qty,
+      'received',
+      { type: 'system' },
+      `seed:${p.sku}`,
+      {
+        note: 'Opening stock',
+      },
+    );
+    await StockLevelModel.updateOne(
+      { product: product._id, office: glow.warehousing!.office },
+      { bin },
+    );
+  }
+  console.log('✓ warehousing client "Naija Glow Skincare" with 4 products at ABJ-WSE');
+
+  // A client portal login for the same business (http://localhost:5500).
+  await ClientUserModel.updateOne(
+    { email: 'amaka@naijaglow.ng' },
+    {
+      $setOnInsert: {
+        client: glow._id,
+        name: 'Amaka Eze',
+        email: 'amaka@naijaglow.ng',
+        passwordHash: await bcrypt.hash('Portal12345', 10),
+        mustChangePassword: false,
+        isActive: true,
+      },
+    },
+    { upsert: true },
+  );
+  console.log('✓ client portal login amaka@naijaglow.ng (password: Portal12345)');
 
   await disconnectDB();
   redis.disconnect();

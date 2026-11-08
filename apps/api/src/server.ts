@@ -8,6 +8,7 @@ import { registerFinance } from './modules/finance/finance.listeners';
 import { registerNotifications } from './modules/notifications/notifications.listeners';
 import { registerPayments } from './modules/payments/payments.listeners';
 import { registerPayouts } from './modules/payouts/payouts.listeners';
+import { registerWarehousing } from './modules/warehousing/warehousing.listeners';
 import { registerWebhooks } from './modules/webhooks/webhooks.listeners';
 
 async function start() {
@@ -20,6 +21,7 @@ async function start() {
   registerWebhooks();
   registerPayments();
   registerPayouts();
+  registerWarehousing();
 
   const app = await buildApp();
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

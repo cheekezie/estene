@@ -1,6 +1,5 @@
 import { Types } from 'mongoose';
 import type { LedgerEntryType } from '@estene/contracts/enums';
-import { bankName } from '@estene/contracts/banks';
 import type {
   BankAccountInput,
   CreatePayoutInput,
@@ -14,7 +13,8 @@ import { redis } from '../../lib/redis';
 import { paginate } from '../../lib/response';
 import { FinanceService } from '../finance/finance.service';
 import { LedgerEntryModel } from '../finance/models/ledger-entry.model';
-import { gateway } from '../payments/providers';
+import { gateway, gatewayFor } from '../payments/providers';
+import type { TransferResult } from '../payments/providers/gateway';
 import { RiderModel } from '../riders/models/rider.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { PayoutModel, type IPayout } from './models/payout.model';
@@ -168,7 +168,8 @@ export const PayoutsService = {
     });
     rider.bankAccount = {
       ...input,
-      bankName: bankName(input.bankCode),
+      bankName:
+        (await gateway.listBanks()).find((b) => b.code === input.bankCode)?.name ?? input.bankCode,
       accountName,
       verifiedAt: new Date(),
     };
@@ -273,7 +274,11 @@ export const PayoutsService = {
     return results;
   },
 
-  /** Worker: one transfer attempt. Only a confirmed success touches the ledger. */
+  /**
+   * Worker: one transfer attempt. Only a confirmed success touches the ledger.
+   * A retry first asks the gateway about the earlier attempt, so a transfer
+   * that actually went out is never sent twice.
+   */
   async process(payoutId: string) {
     const payout = await PayoutModel.findOneAndUpdate(
       { _id: payoutId, status: 'pending' },
@@ -281,17 +286,35 @@ export const PayoutsService = {
       { new: true },
     );
     if (!payout?.bankAccount) return;
+    if (payout.attempts > 1) {
+      // Ask the gateway the earlier attempt went through, even after a provider switch.
+      const earlierGateway = gatewayFor(payout.provider);
+      if (!earlierGateway)
+        return this.apply(payout._id, {
+          status: 'failed',
+          message: `Check this payout on ${payout.provider} before retrying — its key is no longer set`,
+        });
+      const earlier = await earlierGateway.transferStatus(payout.reference);
+      if (earlier.status !== 'failed') return this.apply(payout._id, earlier);
+    }
+    await PayoutModel.updateOne({ _id: payout._id }, { provider: gateway.name });
     const result = await gateway.transfer({
       reference: payout.reference,
       amount: payout.amount,
       bankCode: payout.bankAccount.bankCode,
+      bankName: payout.bankAccount.bankName,
       accountNumber: payout.bankAccount.accountNumber,
       accountName: payout.bankAccount.accountName,
       narration: `Estene payout ${payout.reference}`,
     });
+    await this.apply(payout._id, result);
+  },
+
+  /** Moves a processing payout to its final state. Compare-and-set, so webhook and sweep can race safely. */
+  async apply(payoutId: Types.ObjectId, result: TransferResult) {
     if (result.status === 'success') {
-      await PayoutModel.updateOne(
-        { _id: payout._id },
+      const done = await PayoutModel.findOneAndUpdate(
+        { _id: payoutId, status: 'processing' },
         {
           status: 'success',
           providerReference: result.providerReference,
@@ -299,14 +322,36 @@ export const PayoutsService = {
           failureReason: null,
         },
       );
-      await FinanceService.recordPayout(payout.id);
+      if (done) await FinanceService.recordPayout(payoutId.toString());
     } else if (result.status === 'failed') {
       await PayoutModel.updateOne(
-        { _id: payout._id },
+        { _id: payoutId, status: 'processing' },
         { status: 'failed', failureReason: result.message ?? 'Transfer failed' },
       );
     }
-    // `pending`: stays processing until the gateway's status check/webhook settles it.
+    // `pending`: stays processing until the webhook or the sweep settles it.
+  },
+
+  /** Asks the gateway about one processing payout (from a webhook or the sweep). */
+  async settleByReference(reference: string) {
+    const payout = await PayoutModel.findOne({ reference, status: 'processing' }, '_id provider');
+    if (!payout) return false;
+    const sentVia = gatewayFor(payout.provider);
+    if (!sentVia) return true; // old gateway's key removed — settle it by hand
+    await this.apply(payout._id, await sentVia.transferStatus(reference));
+    return true;
+  },
+
+  /** Safety net for missed webhooks: re-checks payouts stuck in processing. */
+  async sweepProcessing() {
+    const stuck = await PayoutModel.find(
+      { status: 'processing', updatedAt: { $lt: new Date(Date.now() - 2 * 60_000) } },
+      'reference',
+    ).limit(100);
+    for (const p of stuck)
+      await this.settleByReference(p.reference).catch((err: Error) =>
+        console.error('[payouts] status check failed', p.reference, err.message),
+      );
   },
 
   async retry(payoutId: string) {

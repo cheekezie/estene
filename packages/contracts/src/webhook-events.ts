@@ -1,6 +1,7 @@
-import type { ShipmentStatus, WebhookEvent } from './enums';
+import type { ShipmentStatus, ShipmentWebhookEvent, WebhookEvent } from './enums';
 
-export type WebhookEventGroup = 'Booking' | 'Rider' | 'On the move' | 'Outcome' | 'Billing';
+export type WebhookEventGroup =
+  'Booking' | 'Rider' | 'On the move' | 'Outcome' | 'Billing' | 'Warehouse';
 
 /** Human-facing copy for every webhook event: admin console, developer docs, payload `title`. */
 export const WEBHOOK_EVENT_META: Record<
@@ -83,6 +84,49 @@ export const WEBHOOK_EVENT_META: Record<
     description: 'The rider found a different size or weight and the price was recalculated.',
     group: 'Billing',
   },
+  'order.created': {
+    title: 'Order received',
+    description:
+      'A warehouse order was created. Its status says whether stock was reserved or it is waiting for stock.',
+    group: 'Warehouse',
+  },
+  'order.stock_reserved': {
+    title: 'Order ready to pick',
+    description: 'Stock arrived for an order that was waiting, and it was reserved.',
+    group: 'Warehouse',
+  },
+  'order.shipped': {
+    title: 'Order shipped',
+    description:
+      'The order was packed and handed in as a shipment. The tracking number is attached.',
+    group: 'Warehouse',
+  },
+  'order.delivered': {
+    title: 'Order delivered',
+    description: 'The order’s shipment was delivered or collected.',
+    group: 'Warehouse',
+  },
+  'order.returned': {
+    title: 'Order returned',
+    description: 'The order’s shipment came back to the warehouse.',
+    group: 'Warehouse',
+  },
+  'order.cancelled': {
+    title: 'Order cancelled',
+    description: 'The order was cancelled and its stock released.',
+    group: 'Warehouse',
+  },
+  'inbound.received': {
+    title: 'Stock received',
+    description:
+      'The warehouse counted an inbound delivery. Received and damaged counts are attached.',
+    group: 'Warehouse',
+  },
+  'stock.low': {
+    title: 'Stock running low',
+    description: 'A product’s available stock fell to or below your low-stock threshold.',
+    group: 'Warehouse',
+  },
 };
 
 /** Titles for non-subscribable events that still appear in delivery logs. */
@@ -100,11 +144,14 @@ export const webhookEventTitle = (type: string) =>
 export function webhookEventForStatus(
   from: ShipmentStatus,
   to: ShipmentStatus,
-): WebhookEvent | null {
+): ShipmentWebhookEvent | null {
   if (to === 'created') return from === 'awaiting_payment' ? null : 'shipment.rider_unassigned';
   // A last-mile rider taken off the job leaves the parcel at the office.
   if (to === 'at_hub' && from === 'assigned') return 'shipment.rider_unassigned';
-  const map: Record<Exclude<ShipmentStatus, 'created' | 'awaiting_payment'>, WebhookEvent> = {
+  const map: Record<
+    Exclude<ShipmentStatus, 'created' | 'awaiting_payment'>,
+    ShipmentWebhookEvent
+  > = {
     assigned: 'shipment.rider_assigned',
     en_route_to_pickup: 'shipment.rider_en_route',
     picked_up: 'shipment.picked_up',

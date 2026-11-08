@@ -43,7 +43,7 @@
    - office hand-in and collect-from-office (`POST /rider/jobs/:id/collect-from-office` exists)
    - PIN/photo delivery, earnings
    - its heartbeats feed fleet live location
-6. **SaySwitch integration:** implement the `PaymentGateway` interface (checkout, virtual account for price top-ups, webhook verification) and payouts to riders and fleets. The view is built and the dev simulator is in place.
+6. **Payments (done 2026-11-07):** SaukiPay collects and SaySwitch pays out, behind `CollectionGateway` and `PayoutGateway`. Left: confirm amount units in test mode, and add fleet payouts.
 
 **Small follow-ups from the offices work:**
 

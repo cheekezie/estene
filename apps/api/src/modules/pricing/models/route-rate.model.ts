@@ -21,4 +21,5 @@ routeRateSchema.index({ zoneA: 1, zoneB: 1 }, { unique: true });
 
 export const RouteRateModel = model<IRouteRate>('RouteRate', routeRateSchema);
 
-export const orderedPair = (a: string, b: string) => (a < b ? { zoneA: a, zoneB: b } : { zoneA: b, zoneB: a });
+export const orderedPair = (a: string, b: string) =>
+  a < b ? { zoneA: a, zoneB: b } : { zoneA: b, zoneB: a };

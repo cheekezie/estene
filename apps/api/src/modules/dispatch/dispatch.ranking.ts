@@ -21,12 +21,20 @@ export type RankedCandidate = Candidate & { tier: 0 | 1 | 2 };
  * Within a tier, the rider carrying fewer jobs wins, then the nearer one.
  * Riders at their job cap are skipped.
  */
-export function rankCandidates(candidates: Candidate[], pickupZoneId: string, maxActiveJobs: number): RankedCandidate[] {
+export function rankCandidates(
+  candidates: Candidate[],
+  pickupZoneId: string,
+  maxActiveJobs: number,
+): RankedCandidate[] {
   return candidates
     .filter((c) => c.activeJobs < maxActiveJobs)
     .map((c) => {
       const tier: RankedCandidate['tier'] =
-        String(c.primaryZone) === pickupZoneId ? 0 : c.coverageZones.some((z) => String(z) === pickupZoneId) ? 1 : 2;
+        String(c.primaryZone) === pickupZoneId
+          ? 0
+          : c.coverageZones.some((z) => String(z) === pickupZoneId)
+            ? 1
+            : 2;
       return { ...c, tier };
     })
     .sort((a, b) => a.tier - b.tier || a.activeJobs - b.activeJobs || a.distanceKm - b.distanceKm);

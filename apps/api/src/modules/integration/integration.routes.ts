@@ -11,6 +11,7 @@ import { SHIPMENT_POPULATE } from '../shipments/shipments.mapper';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { PricingService } from '../pricing/pricing.service';
 import { ZonesService } from '../zones/zones.service';
+import { warehousingIntegrationRoutes } from '../warehousing/warehousing.integration';
 import { authenticateApiKey, perKeyRateLimit } from './integration.auth';
 import { toIntegrationShipmentDto } from './integration.mapper';
 
@@ -27,6 +28,8 @@ const ListQuery = PaginationQuerySchema.extend({
  */
 export async function integrationRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticateApiKey);
+  // Products, stock, inbounds and orders for warehousing clients.
+  await app.register(warehousingIntegrationRoutes);
 
   /** Accepts our id, our tracking number, or the client's own reference. */
   const findOwnShipment = async (clientId: string, ref: string) => {

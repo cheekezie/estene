@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { ShipmentStatus } from '@estene/contracts/enums';
+import type { OrderStatus } from '@estene/contracts/warehouse';
 
 /**
  * In-process domain event bus. Services emit facts ("shipment delivered");
@@ -27,6 +28,15 @@ export type DomainEvents = {
   'payment.balance_requested': { paymentId: string; shipmentId: string };
   /** Staff booked a prepaid shipment by phone — the sender needs payment details by SMS. */
   'payment.link_requested': { shipmentId: string };
+  /** Units became available in a warehouse (received, restocked, released) — retry backorders. */
+  'stock.available': { clientId: string; officeId: string };
+  /** A warehouse order arrived (any channel). Fires once per order. */
+  'order.created': { orderId: string };
+  'order.status_changed': { orderId: string; from: OrderStatus; to: OrderStatus };
+  /** An inbound (or a transfer) was counted at the warehouse. */
+  'inbound.received': { inboundId: string };
+  /** A product's available stock fell to the client's threshold. Fires once per dip. */
+  'stock.low': { clientId: string; productId: string; officeId: string };
   'dispatch.offered': { shipmentId: string; riderId: string; offerId: string; expiresAt: Date };
 };
 

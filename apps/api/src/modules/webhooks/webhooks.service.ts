@@ -4,7 +4,11 @@ import type {
   WebhookDeliveryDto,
   WebhookEnvelope,
 } from '@estene/contracts/client';
-import type { WebhookEvent } from '@estene/contracts/enums';
+import type {
+  ShipmentWebhookEvent,
+  WarehouseWebhookEvent,
+  WebhookEvent,
+} from '@estene/contracts/enums';
 import { webhookEventTitle } from '@estene/contracts/webhook-events';
 import { decrypt, randomCode } from '../../lib/crypto';
 import { searchRegex } from '../../lib/db';
@@ -99,7 +103,7 @@ async function readSnippet(res: Response) {
 export const WebhooksService = {
   /** Called from domain-event listeners. A no-op unless the shipment belongs to a subscribed client. */
   async notifyShipmentEvent(
-    type: WebhookEvent,
+    type: ShipmentWebhookEvent,
     shipmentId: string,
     extra: Record<string, unknown> = {},
   ) {
@@ -121,6 +125,21 @@ export const WebhooksService = {
         trackingNumber: shipment.trackingNumber,
       },
     );
+  },
+
+  /**
+   * Warehousing events (orders, inbounds, stock). `build` runs only when the
+   * client is subscribed, so unsubscribed clients cost one lookup.
+   */
+  async notifyClientEvent(
+    type: WarehouseWebhookEvent,
+    clientId: string,
+    build: () => Promise<{ summary: string; data: Record<string, unknown> } | null>,
+  ) {
+    const client = await ClientModel.findOne({ _id: clientId, status: 'active' }, 'webhook');
+    if (!client?.webhook?.isActive || !client.webhook.events.includes(type)) return;
+    const payload = await build();
+    if (payload) await enqueue(client, type, payload.summary, payload.data);
   },
 
   /** Worker: one HTTP attempt. Throwing hands the retry back to BullMQ. */

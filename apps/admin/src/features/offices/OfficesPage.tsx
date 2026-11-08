@@ -68,7 +68,10 @@ export default function OfficesPage() {
                           </span>
                           <h3 className="mt-2 font-semibold">{o.name}</h3>
                         </div>
-                        {!o.isActive && <Badge>Closed</Badge>}
+                        <div className="flex gap-1.5">
+                          {o.isWarehouse && <Badge tone="info">Warehouse</Badge>}
+                          {!o.isActive && <Badge>Closed</Badge>}
+                        </div>
                       </div>
                       <div className="text-muted-foreground mt-3 space-y-1.5 text-sm">
                         <p className="flex items-start gap-2">
@@ -135,9 +138,10 @@ function OfficeDialog({ office, onClose }: { office: OfficeDto | null; onClose: 
           phone: office.phone,
           openingHours: office.openingHours,
           isActive: office.isActive,
+          isWarehouse: office.isWarehouse,
           location: office.location,
         }
-      : { openingHours: 'Mon–Sat, 8am–6pm', isActive: true },
+      : { openingHours: 'Mon–Sat, 8am–6pm', isActive: true, isWarehouse: false },
   });
 
   return (
@@ -194,6 +198,10 @@ function OfficeDialog({ office, onClose }: { office: OfficeDto | null; onClose: 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="accent-primary size-4" {...register('isActive')} />
             Open for drop-off and collection
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="accent-primary size-4" {...register('isWarehouse')} />
+            Warehouse — stores business clients’ stock and ships their orders
           </label>
           <div className="flex justify-end gap-2 border-t pt-4">
             <Button type="button" variant="outline" onClick={onClose}>

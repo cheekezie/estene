@@ -41,4 +41,10 @@ export const templates = {
 
   priceAdjusted: (tn: string, from: number, to: number, reason?: string) =>
     `Estene: the price for ${tn} changed from ${formatNaira(from)} to ${formatNaira(to)} after the rider checked your parcel${reason ? ` (${reason})` : ''}.`,
+
+  balanceDueOnline: (tn: string, amount: number) =>
+    `Estene: ${tn} costs ${formatNaira(amount)} more after the rider checked it. Pay by card, transfer or USSD at ${TRACK_URL}/${tn} before delivery.`,
+
+  lowStock: (name: string, sku: string, available: number, warehouse: string) =>
+    `Estene: ${name} (${sku}) is running low at ${warehouse} — ${available} left to sell. Send more stock to keep orders moving.`,
 };

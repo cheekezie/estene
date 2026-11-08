@@ -9,10 +9,11 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false --env-file-if-exists=.env src/server.ts",
     "build": "tsup",
-    "start": "node --env-file-if-exists=.env dist/server.js",
+    "start": "node --enable-source-maps --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "seed": "tsx --env-file-if-exists=.env src/scripts/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env src/scripts/seed.ts",
+    "create-admin": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@estene/contracts": "workspace:*",

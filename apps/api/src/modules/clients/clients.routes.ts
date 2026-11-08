@@ -11,6 +11,8 @@ import { ObjectIdSchema } from '@estene/contracts/common';
 import { CLIENT_STATUSES } from '@estene/contracts/enums';
 import { parse, send } from '../../lib/response';
 import { requireActor, requireRole } from '../../plugins/auth';
+import { PortalUserCreateSchema } from '@estene/contracts/portal';
+import { PortalService } from '../portal/portal.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { AdminModel } from '../admins/models/admin.model';
 import { ClientsService } from './clients.service';
@@ -137,6 +139,43 @@ export async function clientsRoutes(app: FastifyInstance) {
       await WebhooksService.resend(id(req.params), deliveryId),
       202,
       'Delivery re-queued',
+    );
+  });
+
+  // Client portal users. The temporary password is in the create/reset response only.
+  const UserParams = z.object({ id: ObjectIdSchema, userId: ObjectIdSchema });
+  app.get('/:id/portal-users', async (req, reply) =>
+    send(reply, await PortalService.listUsers(id(req.params))),
+  );
+  app.post('/:id/portal-users', manage, async (req, reply) =>
+    send(
+      reply,
+      await PortalService.createUser(
+        id(req.params),
+        parse(PortalUserCreateSchema, req.body),
+        req.user.sub,
+      ),
+      201,
+      'Portal user created — share the temporary password now',
+    ),
+  );
+  app.post('/:id/portal-users/:userId/reset-password', manage, async (req, reply) => {
+    const p = parse(UserParams, req.params);
+    return send(
+      reply,
+      await PortalService.resetPassword(p.id, p.userId),
+      200,
+      'New temporary password issued',
+    );
+  });
+  app.post('/:id/portal-users/:userId/status', manage, async (req, reply) => {
+    const p = parse(UserParams, req.params);
+    const { isActive } = parse(z.object({ isActive: z.boolean() }), req.body);
+    return send(
+      reply,
+      await PortalService.setActive(p.id, p.userId, isActive),
+      200,
+      isActive ? 'Access restored' : 'Access switched off',
     );
   });
 }

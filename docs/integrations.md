@@ -168,12 +168,16 @@ operations instead.
   "rider": { "firstName": "Musa" },
   "proofOfDelivery": null,
   "events": [ { "status": "created", "at": "2026-10-12T08:57:16.885Z", "note": null }, … ],
+  "order": null,
   "createdAt": "2026-10-12T08:57:16.885Z",
   "updatedAt": "2026-10-12T09:02:41.120Z"
 }
 ```
 
-`amount.final` is set once the rider confirms the parcel at pickup. `proofOfDelivery` is
+`amount.final` is set once the rider confirms the parcel at pickup. `order` is set when
+the shipment was packed from one of your [warehousing orders](#warehousing):
+`{ "number": "ORD-…", "reference": "your-order-id" | null }`. Use it to match shipment
+webhooks back to your order. `proofOfDelivery` is
 set on delivery: `{ "method": "pin" | "photo", "photoUrl", "receivedBy", "at" }`.
 
 ### Status lifecycle
@@ -187,6 +191,168 @@ created / assigned → cancelled
 
 Terminal statuses: `delivered`, `returned`, `cancelled`. Treat unknown statuses
 gracefully; we may add new ones.
+
+## Warehousing
+
+For businesses that keep stock with us. We hold your goods in an Estene warehouse;
+you send orders and we pick, pack and deliver them. These endpoints return
+`403 WAREHOUSING_DISABLED` until Estene operations switch warehousing on for your account.
+
+The flow:
+
+1. **Create your products** (`POST /products`): one per SKU.
+2. **Tell us what you're sending** (`POST /inbounds`). When it arrives we count it in,
+   and the good units become available stock.
+3. **Send orders** (`POST /orders`). Stock is reserved right away. If any line is short,
+   the order waits as `awaiting_stock` and is reserved automatically when stock arrives.
+4. **We pack each order into a shipment.** From then on it is an ordinary shipment, with
+   the same tracking, the same `shipment.*` webhooks and the same billing. The shipment's
+   `order` field names the order.
+
+Storage is billed as a flat monthly fee on your account. Each delivery is billed like any
+other shipment.
+
+### Products
+
+| Method & path           | What it does                                            |
+| ----------------------- | ------------------------------------------------------- |
+| `GET /products`         | Your catalogue (`?search=`, `?active=true`, paginated)  |
+| `POST /products`        | Create a product. `409 DUPLICATE_SKU` if the SKU exists |
+| `GET /products/{sku}`   | One product, by SKU or id                               |
+| `PATCH /products/{sku}` | Update anything except the SKU                          |
+
+```json
+{
+  "sku": "SHEA-250",
+  "name": "Whipped shea butter 250ml",
+  "size": "small",
+  "weightKg": 0.3,
+  "declaredValue": 650000,
+  "fragile": false,
+  "barcode": "6151234567890"
+}
+```
+
+`size` is the packed size of **one unit** (`envelope`, `small`, `medium`, `large`,
+`xlarge`), and `declaredValue` is the value of one unit in kobo. We use both to size and
+insure each parcel.
+
+### `GET /stock`: what's on the shelf
+
+```json
+[
+  {
+    "sku": "SHEA-250",
+    "name": "Whipped shea butter 250ml",
+    "onHand": 38,
+    "reserved": 2,
+    "available": 36,
+    "warehouse": "ABJ-WSE"
+  }
+]
+```
+
+`reserved` units belong to orders that are not packed yet. Filter with `?sku=`.
+
+### Inbounds: sending us stock
+
+`POST /inbounds`:
+
+```json
+{
+  "reference": "PO-2291",
+  "expectedAt": "2026-10-21",
+  "lines": [{ "sku": "SHEA-250", "expectedQty": 100 }]
+}
+```
+
+`reference` is your own id (purchase order, waybill). Sending the same one again returns
+the original inbound (`200`), not a duplicate. Once we count the delivery, `status`
+becomes `received` and each line shows `receivedQty` (good units now in stock) and
+`damagedQty`. `GET /inbounds`, `GET /inbounds/{ref}` and `POST /inbounds/{ref}/cancel`
+(only while `expected`) are also available.
+
+When we move your stock between our warehouses, the move shows up as an inbound at the
+destination with `transferFrom` set to the origin's office code (it is `null` for your own
+deliveries). You can't cancel a transfer; ask us if you need to.
+
+### `POST /orders`: ship from your stock
+
+```json
+{
+  "reference": "SO-10023",
+  "recipient": {
+    "contactName": "Ngozi Eze",
+    "phone": "08064445555",
+    "zoneId": "64b7…",
+    "area": "Garki II",
+    "address": "9 Lagos Street",
+    "landmark": "Opposite the church"
+  },
+  "deliveryMode": "door",
+  "serviceLevel": "standard",
+  "paymentMethod": "on_account",
+  "lines": [
+    { "sku": "SHEA-250", "qty": 2 },
+    { "sku": "SOAP-BLK", "qty": 1 }
+  ],
+  "notes": "Gift — no invoice in the box"
+}
+```
+
+- `reference` makes the call idempotent. A retry returns the original order with `200`.
+- `deliveryMode: "collection"` with `destinationOfficeId` lets the recipient collect at
+  an office. In that case the address fields are not needed.
+- `paymentMethod` is `on_account` (we bill you) or `cash_on_delivery` (the recipient pays
+  the **delivery fee** to the rider). We do not collect the item's value yet.
+- An unknown or inactive SKU fails with `400 UNKNOWN_PRODUCT` / `INACTIVE_PRODUCT`. The
+  message names the SKU.
+
+`GET /orders` (`?status=`, `?reference=`), `GET /orders/{ref}` (our id, `ORD-` number or
+your reference) and `POST /orders/{ref}/cancel` are also available. You can cancel until
+we pack the order. After packing, you can still cancel while the parcel is waiting at our
+warehouse with no rider assigned. Once it has left, an undelivered parcel comes back as
+`returned`.
+
+### The order object
+
+```json
+{
+  "id": "6ad5dc5db8e583e72d4b784a",
+  "number": "ORD-9WTH0XFN",
+  "reference": "SO-10023",
+  "status": "shipped",
+  "statusLabel": "Shipped",
+  "recipient": {
+    "contactName": "Ngozi Eze",
+    "phone": "+2348064445555",
+    "area": "Garki II",
+    "address": "9 Lagos Street"
+  },
+  "deliveryMode": "door",
+  "serviceLevel": "standard",
+  "lines": [{ "sku": "SHEA-250", "name": "Whipped shea butter 250ml", "qty": 2 }],
+  "shipment": {
+    "trackingNumber": "ESTMR8JZM5XH",
+    "trackingUrl": "https://estene.ng/track/ESTMR8JZM5XH",
+    "status": "at_hub"
+  },
+  "createdAt": "2026-10-19T09:01:17.000Z",
+  "updatedAt": "2026-10-19T09:03:01.000Z"
+}
+```
+
+Order statuses:
+
+```
+awaiting_stock → ready_to_pick → picking → shipped → delivered
+                                                   ↘ returned   (the shipment came back)
+awaiting_stock / ready_to_pick / picking → cancelled
+```
+
+Subscribe to the `order.*` webhooks below to follow an order without polling. The
+`shipment.*` events still fire for the parcel itself, and `data.shipment.order.reference`
+links them back to your order.
 
 ## Webhooks
 
@@ -212,6 +378,23 @@ secret** (`whsec_…`) with you. Subscribe only to what you act on: many integra
 | `ping`                      | Test event              | Sent from our console to check your endpoint                                          |
 
 Status events also carry `data.previousStatus` and `data.status`.
+
+**Warehousing events** (store-and-ship clients only):
+
+| Event                  | Title               | When                                                                       | `data`        |
+| ---------------------- | ------------------- | -------------------------------------------------------------------------- | ------------- |
+| `order.created`        | Order received      | An order arrived from any channel. `status` says if stock was reserved     | `{ order }`   |
+| `order.stock_reserved` | Order ready to pick | Stock arrived for an order that was `awaiting_stock`                       | `{ order }`   |
+| `order.shipped`        | Order shipped       | Packed and handed in; `order.shipment.trackingNumber` is set               | `{ order }`   |
+| `order.delivered`      | Order delivered     | The order's shipment was delivered or collected                            | `{ order }`   |
+| `order.returned`       | Order returned      | The shipment came back undelivered                                         | `{ order }`   |
+| `order.cancelled`      | Order cancelled     | The order was cancelled and its stock released                             | `{ order }`   |
+| `inbound.received`     | Stock received      | We counted an inbound (or a transfer). Lines carry received/damaged counts | `{ inbound }` |
+| `stock.low`            | Stock running low   | A product's available stock fell to your low-stock threshold, once per dip | `{ stock }`   |
+
+`order`, `inbound` and `stock` are the same objects the `/orders`, `/inbounds` and `/stock`
+endpoints return. `stock.low` fires again only after the product has been restocked above
+the threshold.
 
 **Request we send:**
 
@@ -315,3 +498,4 @@ immediately, so deploy the new one as soon as you receive it.
 - [ ] Webhook verifies signature + timestamp, responds 2xx fast, de-duplicates on `Estene-Delivery`
 - [ ] Out-of-order events handled via `data.shipment.updatedAt`
 - [ ] Amounts treated as kobo integers
+- [ ] Warehousing: every order and inbound sends your own `reference`; retries reuse it

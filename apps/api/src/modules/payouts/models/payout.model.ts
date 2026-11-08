@@ -16,6 +16,8 @@ export interface IPayout {
   status: PayoutStatus;
   /** Snapshot at send time — later changes to the rider's account don't rewrite history. */
   bankAccount?: { bankCode: string; bankName: string; accountNumber: string; accountName: string };
+  /** Gateway the last attempt went through, so its status is checked there after a provider switch. */
+  provider?: string;
   providerReference?: string;
   failureReason?: string;
   note?: string;
@@ -34,6 +36,7 @@ const payoutSchema = new Schema<IPayout>(
     method: { type: String, enum: PAYOUT_METHODS, required: true },
     status: { type: String, enum: PAYOUT_STATUSES, default: 'pending', index: true },
     bankAccount: { bankCode: String, bankName: String, accountNumber: String, accountName: String },
+    provider: String,
     providerReference: String,
     failureReason: String,
     note: String,

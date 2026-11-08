@@ -55,6 +55,12 @@ export function toIntegrationShipmentDto(
       at: e.at.toISOString(),
       note: e.note ?? null,
     })),
+    order: o.order
+      ? {
+          number: (o.order as unknown as { number: string }).number,
+          reference: (o.order as unknown as { reference?: string }).reference ?? null,
+        }
+      : null,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
   };

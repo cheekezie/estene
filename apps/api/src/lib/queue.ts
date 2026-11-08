@@ -15,7 +15,12 @@ export function getQueue(name: string) {
   if (!q) {
     q = new Queue(name, {
       connection,
-      defaultJobOptions: { removeOnComplete: 1000, removeOnFail: 5000, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      defaultJobOptions: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
     });
     queues.set(name, q);
   }
@@ -24,11 +29,16 @@ export function getQueue(name: string) {
 
 export function startWorker(name: string, processor: Processor, concurrency = 5) {
   const worker = new Worker(name, processor, { connection: createQueueConnection(), concurrency });
-  worker.on('failed', (job, err) => console.error(`[queue:${name}] job ${job?.name} failed:`, err.message));
+  worker.on('failed', (job, err) =>
+    console.error(`[queue:${name}] job ${job?.name} failed:`, err.message),
+  );
   workers.push(worker);
   return worker;
 }
 
 export async function closeQueues() {
-  await Promise.all([...workers.map((w) => w.close()), ...[...queues.values()].map((q) => q.close())]);
+  await Promise.all([
+    ...workers.map((w) => w.close()),
+    ...[...queues.values()].map((q) => q.close()),
+  ]);
 }

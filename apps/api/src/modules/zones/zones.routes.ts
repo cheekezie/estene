@@ -21,6 +21,11 @@ export async function zonesRoutes(app: FastifyInstance) {
 
   app.patch('/:id', canEdit, async (req, reply) => {
     const { id } = parse(IdParams, req.params);
-    return send(reply, await ZonesService.update(id, parse(ZoneInputSchema.partial(), req.body)), 200, 'Zone updated');
+    return send(
+      reply,
+      await ZonesService.update(id, parse(ZoneInputSchema.partial(), req.body)),
+      200,
+      'Zone updated',
+    );
   });
 }

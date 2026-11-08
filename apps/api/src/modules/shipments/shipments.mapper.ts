@@ -25,6 +25,7 @@ export const SHIPMENT_POPULATE = [
     }),
   ),
   { path: 'manifest', select: 'code' },
+  { path: 'order', select: 'number reference' },
 ];
 
 type OfficeRef = {
@@ -124,6 +125,12 @@ export function toShipmentDto(o: IShipment): ShipmentDto {
       actor: e.actorType,
       at: e.at.toISOString(),
     })),
+    order: o.order
+      ? {
+          id: (o.order as unknown as { _id: Types.ObjectId })._id.toString(),
+          number: (o.order as unknown as { number: string }).number,
+        }
+      : null,
     createdAt: o.createdAt.toISOString(),
   };
 }

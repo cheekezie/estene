@@ -20,6 +20,7 @@ Every client talks to one API. Routes are split by audience:
 | `/api/public/*` | Website               | None, rate limited per IP                          |
 | `/api/rider/*`  | Rider app             | JWT, `actor: rider`                                |
 | `/api/v1/*`     | Business integrations | API key (`Bearer est_live_…`), per-key rate limits |
+| `/api/portal/*` | Client portal         | JWT, `actor: client` with a `clientId` claim       |
 | everything else | Admin console         | JWT, `actor: admin` plus role guards               |
 
 ## What changed from the eduspace pattern
@@ -113,6 +114,81 @@ posts `payment_received`. The difference is the client's outstanding balance.
 - Creates are idempotent on `(client, clientReference)` through a unique index.
 - The response shape is `IntegrationShipmentDto`. Changing it is a breaking change.
 
+### Warehousing (`modules/warehousing`)
+
+Some business clients store stock with us (store-and-ship, see [`plans/warehousing.md`](plans/warehousing.md)).
+An office flagged `isWarehouse` holds it. A client with `warehousing.enabled` has products, a
+`StockLevel` per product and warehouse (`onHand`, `reserved`), and an append-only `StockMovement`
+history, which works like the ledger and uses idempotency keys.
+
+- **Orders** come from the API or the admin. Every line is reserved with a conditional `$inc`
+  (`onHand − reserved ≥ qty`), so stock never oversells. A short order waits as `awaiting_stock`.
+  `stock.available` (inbound received, restock, cancel, positive adjustment) retries waiting
+  orders oldest-first.
+- **Packing an order creates the shipment.** The shipment is a `dropoff` at the warehouse office,
+  accepted at the counter with a tag, so it is `at_hub` straight away. A local door delivery goes
+  into dispatch immediately. From there it is a normal shipment. `shipment.order` links back, and
+  a listener moves the order to `delivered` or `returned`.
+- **Returns** must be processed by staff: each unit goes back on the shelf (`restocked`) or is
+  written off. A packed order still at the warehouse with no rider can be cancelled, which
+  unpacks it: the shipment is cancelled and the stock restocked.
+- **Billing:** a flat `warehousing.monthlyFee` is posted as `storage_fee` on the 1st (BullMQ job
+  scheduler, Lagos time) for the month just ended. It is keyed `storage:<client>:<YYYY-MM>`.
+
+- **Transfers** move a client's units between warehouses. Available units leave the
+  origin at once (`transferred_out`) and travel as an inbound at the destination with
+  `transferFrom` set; counting it there posts `transferred_in`. Cancelling it before
+  arrival returns the units to the origin. A client's warehouse can only be switched once
+  nothing is left on the old shelves or expected there; waiting backorders follow the switch.
+- **Low stock:** every stock write re-checks `available ≤ lowStockThreshold`. The first dip
+  sets `StockLevel.lowAlertedAt` (compare-and-set) and emits `stock.low` → an SMS to the
+  client's contact and the `stock.low` webhook. Restocking above the threshold re-arms it.
+- **Events:** `order.created`, `order.status_changed`, `inbound.received` and `stock.low`
+  feed the `order.*` / `inbound.received` / `stock.low` webhooks.
+- **Printing:** the admin's `/warehouse/orders/:id/print` renders the pick list (sorted by
+  bin) and the packing slip.
+
+### Client portal (`modules/portal`, `apps/portal`)
+
+People at a business client sign in at the portal (port 5500) with a `ClientUser` account.
+Staff create users from the client's page; the first password is temporary, shown once,
+and must be changed at first sign-in. Tokens carry `actor: client` and `clientId`, and every
+portal route reads the business from the token, never from the request. Each request also
+re-checks that the user and the business are still active, so switching someone off takes
+effect at once. The portal's refresh cookie (`estene_crt`, path `/api/auth/client`) is
+separate from the staff cookie: browsers share cookies across ports on one host.
+
+The portal shows deliveries (in the integration shape, with no PINs), the statement and,
+for warehousing clients, stock, products, orders and inbounds.
+
+### Payment gateways (`modules/payments/providers`)
+
+One gateway handles money in (customer payments) and money out (rider payouts), chosen by
+`PAYMENTS_PROVIDER`: `saukipay` (production), `sayswitch` or `simulator`. Each implements
+`PaymentGateway` (`CollectionGateway` + `PayoutGateway`). Keeping both sides on one gateway
+means one wallet, one set of bank codes and one webhook. The simulator is refused in production.
+
+**Switching** is an env change plus a restart. Payments and payouts record their provider, so
+ones still in flight on the old gateway are checked there, and its webhooks are still
+accepted, for as long as that gateway's secret key stays set. A payout retried after a switch
+is checked on the old gateway first and only re-sent if it failed there.
+
+- **Trust nothing but `verify`.** Redirects and webhooks are hints. Each webhook
+  (`/api/public/payments/webhooks/:provider`) is authenticated (SaukiPay sends the secret in
+  an `ApiKey` header; SaySwitch signs with HMAC-SHA512 in `payloadSignature`). Then every
+  reference in it is matched to one of our payments or payouts and re-checked with the
+  gateway. Reconcile sweeps cover missed webhooks.
+- **Bank transfer.** SaukiPay has no one-off account numbers: transfer is a channel inside
+  its hosted checkout. When the collection gateway can't issue accounts, `startPayment` sends
+  a pay link instead (bookings, and price top-ups by SMS).
+- **Payouts** re-check an earlier attempt's status before re-sending, so a retry never pays
+  twice. Transfers left `processing` are swept every 5 minutes. Bank codes come from the
+  gateway (`GET /payouts/banks`), so rider bank accounts must be re-saved after switching
+  gateways. SaukiPay payouts add a recipient, then pay it from the wallet; both requests carry
+  an HMAC-SHA512 signature of the body.
+- **Amount units:** SaukiPay reads naira. `SAUKIPAY_AMOUNT_UNIT` and `SAYSWITCH_AMOUNT_UNIT`
+  (`naira` | `kobo`) stay in env because SaySwitch's docs are ambiguous.
+
 ### Webhooks (`modules/webhooks`)
 
 Internal domain events (`shipment.created`, `shipment.status_changed`, `shipment.price_adjusted`)
@@ -167,11 +243,12 @@ Rider balance = earnings − payouts − cash held.
    - login, online toggle with background location heartbeat, offer card with countdown
    - QR scan for pickup and delivery, PIN entry, photo capture
 2. **Uploads:** presigned R2/S3 URLs for delivery photos and rider KYC documents.
-3. **Payments:** Paystack card and transfer with a verified webhook → `payment_received`.
+3. **Payments:** run a test payment and payout on SaukiPay. Then add fleet payouts.
 4. **Customer accounts:** phone OTP sign-in, shipment history, saved addresses.
 5. **Live ops map:** Socket.IO and map tiles in the admin, plus a rider live view.
 6. **Notifications:** WhatsApp and email channels, and push for riders.
-7. **Client self-service portal:** keys, webhook settings, delivery log, invoices and statements;
+7. **Client portal, next:** self-serve API keys, webhook settings, the delivery log and
+   invoices;
    a sandbox (`est_test_` keys against seeded data); IP-pinned webhook sends to close the
    DNS-rebinding gap.
 8. **Audit log** for admin actions; printable QR tag sheets; ESLint config.

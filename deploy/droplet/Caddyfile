@@ -1,0 +1,5 @@
+# HTTPS certificates are issued and renewed automatically for API_DOMAIN.
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:4000
+}

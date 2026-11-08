@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { NIGERIAN_BANKS } from '@estene/contracts/banks';
 import { env } from '../../../config/env';
 import { redis } from '../../../lib/redis';
 import type { PaymentGateway } from './gateway';
@@ -19,7 +20,7 @@ export const SimulatorGateway: PaymentGateway & {
     await redis.set(outcomeKey(ref), JSON.stringify({ outcome, amount }), 'EX', 86_400);
   },
 
-  checkoutSession({ reference, amount, returnUrl }) {
+  async checkoutSession({ reference, amount, returnUrl }) {
     const checkoutUrl = `${env.API_PUBLIC_URL}/api/public/payments/${reference}/simulate?return=${encodeURIComponent(returnUrl)}`;
     return { reference, amount, provider: 'simulator', checkoutUrl };
   },
@@ -53,14 +54,17 @@ export const SimulatorGateway: PaymentGateway & {
         };
   },
 
-  async createVirtualAccount({ amount, accountName }) {
-    void amount;
+  async createVirtualAccount({ accountName }) {
     return {
       accountNumber: `99${randomInt(10_000_000, 99_999_999)}`,
       bankName: 'Simulated Bank',
       accountName,
       expiresAt: new Date(Date.now() + 48 * 3_600_000).toISOString(),
     };
+  },
+
+  async listBanks() {
+    return NIGERIAN_BANKS.map((b) => ({ code: b.code, name: b.name }));
   },
 
   async nameEnquiry({ accountNumber }) {
@@ -75,6 +79,13 @@ export const SimulatorGateway: PaymentGateway & {
     };
   },
 
+  async transferStatus(reference) {
+    return { status: 'success', providerReference: `SIMTRF${reference.slice(-8)}` };
+  },
+
   verifyWebhook: () => true,
-  referenceFromWebhook: (raw) => (JSON.parse(raw) as { reference?: string }).reference ?? null,
+  parseWebhook: (raw) => {
+    const ref = (JSON.parse(raw) as { reference?: string }).reference;
+    return { references: ref ? [ref] : [] };
+  },
 };

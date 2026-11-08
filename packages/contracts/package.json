@@ -24,7 +24,9 @@
     "./payout": "./src/payout.ts",
     "./banks": "./src/banks.ts",
     "./office": "./src/office.ts",
-    "./manifest": "./src/manifest.ts"
+    "./manifest": "./src/manifest.ts",
+    "./warehouse": "./src/warehouse.ts",
+    "./portal": "./src/portal.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"

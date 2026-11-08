@@ -29,6 +29,7 @@ export function toOfficeDto(o: IOffice): OfficeDto {
       ? { lng: o.location.coordinates[0], lat: o.location.coordinates[1] }
       : undefined,
     isActive: o.isActive,
+    isWarehouse: o.isWarehouse ?? false,
     createdAt: o.createdAt.toISOString(),
   };
 }

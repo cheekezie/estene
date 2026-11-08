@@ -10,6 +10,11 @@ import type {
   WebhookDeliveryStatus,
 } from '@estene/contracts/client';
 import type { Paginated } from '@estene/contracts/common';
+import type {
+  PortalUserCreateInput,
+  PortalUserCredentialsDto,
+  PortalUserDto,
+} from '@estene/contracts/portal';
 import type { ClientStatus } from '@estene/contracts/enums';
 import { api } from '@/lib/api';
 
@@ -43,6 +48,7 @@ export const clientKeys = {
   deliveries: (id: string, f?: DeliveryFilters) => ['clients', 'deliveries', id, f] as const,
   delivery: (id: string, deliveryId: string) => ['clients', 'delivery', id, deliveryId] as const,
   webhookStats: (id: string) => ['clients', 'webhook-stats', id] as const,
+  portalUsers: (id: string) => ['clients', 'portal-users', id] as const,
 };
 
 export const useClients = (f: {
@@ -150,3 +156,23 @@ export const useResendDelivery = (id: string) =>
 
 export const revealSecret = (id: string) =>
   api.get<{ secret: string }>(`/clients/${id}/webhook/secret`);
+
+// ── Client portal users ──
+
+export const usePortalUsers = (id: string) =>
+  useQuery({
+    queryKey: clientKeys.portalUsers(id),
+    queryFn: () => api.get<PortalUserDto[]>(`/clients/${id}/portal-users`),
+  });
+export const useCreatePortalUser = (id: string) =>
+  useClientMutation((input: PortalUserCreateInput) =>
+    api.post<PortalUserCredentialsDto>(`/clients/${id}/portal-users`, input),
+  );
+export const useResetPortalPassword = (id: string) =>
+  useClientMutation((userId: string) =>
+    api.post<PortalUserCredentialsDto>(`/clients/${id}/portal-users/${userId}/reset-password`),
+  );
+export const useSetPortalUserActive = (id: string) =>
+  useClientMutation(({ userId, isActive }: { userId: string; isActive: boolean }) =>
+    api.post<PortalUserDto>(`/clients/${id}/portal-users/${userId}/status`, { isActive }),
+  );

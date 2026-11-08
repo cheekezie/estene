@@ -20,7 +20,7 @@ export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
 export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'expired'] as const;
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 
-export const PAYMENT_PROVIDERS = ['sayswitch', 'simulator', 'offline'] as const;
+export const PAYMENT_PROVIDERS = ['saukipay', 'sayswitch', 'simulator', 'offline'] as const;
 export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
 
 export type VirtualAccountDto = {

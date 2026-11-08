@@ -1,0 +1,20 @@
+# Keep images to what the API build needs.
+**/node_modules
+**/dist
+**/.turbo
+**/.next
+**/coverage
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.husky
+docs
+apps/admin
+apps/portal
+apps/web
+packages/api-client
+packages/lib
+packages/theme
+packages/ui

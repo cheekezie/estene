@@ -1,6 +1,11 @@
-import type { WebhookEvent } from '@estene/contracts/enums';
+import type { ShipmentWebhookEvent, WarehouseWebhookEvent } from '@estene/contracts/enums';
 import { formatNaira } from '@estene/contracts/money';
 import type { IntegrationShipmentDto } from '@estene/contracts/shipment';
+import type {
+  IntegrationInboundDto,
+  IntegrationOrderDto,
+  IntegrationStockDto,
+} from '@estene/contracts/warehouse';
 
 export type SummaryExtra = { previousAmount?: number; amount?: number; reason?: string | null };
 
@@ -9,7 +14,7 @@ export type SummaryExtra = { previousAmount?: number; amount?: number; reason?: 
  * to their own customer or ops channel unchanged.
  */
 export function summarize(
-  event: WebhookEvent,
+  event: ShipmentWebhookEvent,
   s: IntegrationShipmentDto,
   extra: SummaryExtra = {},
 ): string {
@@ -51,4 +56,49 @@ export function summarize(
     case 'shipment.cancelled':
       return `${Id} was cancelled.`;
   }
+}
+
+// ── Warehousing ─────────────────────────────────────────────────────────────
+
+type OrderLike = Pick<
+  IntegrationOrderDto,
+  'number' | 'reference' | 'status' | 'recipient' | 'shipment'
+>;
+
+export function summarizeOrder(
+  event: Extract<WarehouseWebhookEvent, `order.${string}`>,
+  o: OrderLike,
+): string {
+  const Id = `Order ${o.number}${o.reference ? ` (your ref ${o.reference})` : ''}`;
+  switch (event) {
+    case 'order.created':
+      return o.status === 'awaiting_stock'
+        ? `${Id} was received but is waiting for stock; it will be reserved when stock arrives.`
+        : `${Id} was received and its stock reserved.`;
+    case 'order.stock_reserved':
+      return `Stock arrived for ${Id.replace(/^Order/, 'order')} and it is ready to pick.`;
+    case 'order.shipped':
+      return `${Id} was packed and shipped as ${o.shipment?.trackingNumber ?? 'a shipment'}.`;
+    case 'order.delivered':
+      return `${Id} was delivered to ${o.recipient.contactName}.`;
+    case 'order.returned':
+      return `${Id} came back to the warehouse undelivered.`;
+    case 'order.cancelled':
+      return `${Id} was cancelled.`;
+  }
+}
+
+export function summarizeInbound(
+  i: Pick<IntegrationInboundDto, 'number' | 'reference' | 'warehouse' | 'lines'>,
+) {
+  const received = i.lines.reduce((n, l) => n + l.receivedQty, 0);
+  const damaged = i.lines.reduce((n, l) => n + l.damagedQty, 0);
+  const ref = `${i.number}${i.reference ? ` (your ref ${i.reference})` : ''}`;
+  return `Inbound ${ref} was counted at ${i.warehouse}: ${received} unit${received === 1 ? '' : 's'} received${damaged ? `, ${damaged} damaged` : ''}.`;
+}
+
+export function summarizeLowStock(
+  s: Pick<IntegrationStockDto, 'sku' | 'name' | 'available' | 'warehouse'>,
+) {
+  return `${s.name} (${s.sku}) is running low at ${s.warehouse}: ${s.available} available.`;
 }

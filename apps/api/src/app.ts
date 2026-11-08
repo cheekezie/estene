@@ -18,11 +18,14 @@ import { officesRoutes } from './modules/offices/offices.routes';
 import { paymentsRoutes } from './modules/payments/payments.routes';
 import { payoutsRoutes } from './modules/payouts/payouts.routes';
 import { simulatorRoutes } from './modules/payments/simulator.routes';
+import { gatewayWebhookRoutes } from './modules/payments/gateway-webhook.routes';
+import { portalRoutes } from './modules/portal/portal.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
 import { publicRoutes } from './modules/public/public.routes';
 import { riderAppRoutes } from './modules/rider-app/rider-app.routes';
 import { ridersRoutes } from './modules/riders/riders.routes';
 import { tagsRoutes } from './modules/tags/tags.routes';
+import { warehousingRoutes } from './modules/warehousing/warehousing.routes';
 import { zonesRoutes } from './modules/zones/zones.routes';
 
 export async function buildApp() {
@@ -103,9 +106,11 @@ export async function buildApp() {
   //   /api/public/*  — public website (no auth, rate limited)
   //   /api/rider/*   — rider mobile app
   //   /api/v1/*      — business integrations (API key)
+  //   /api/portal/*  — client portal (JWT, actor: client)
   //   everything else — admin back office
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(publicRoutes, { prefix: '/api/public' });
+  await app.register(gatewayWebhookRoutes, { prefix: '/api/public' });
   if (env.PAYMENTS_PROVIDER === 'simulator')
     await app.register(simulatorRoutes, { prefix: '/api/public' });
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
@@ -124,6 +129,8 @@ export async function buildApp() {
   await app.register(officeOpsRoutes, { prefix: '/api/office' });
   await app.register(manifestsRoutes, { prefix: '/api/manifests' });
   await app.register(payoutsRoutes, { prefix: '/api/payouts' });
+  await app.register(warehousingRoutes, { prefix: '/api/warehousing' });
+  await app.register(portalRoutes, { prefix: '/api/portal' });
 
   return app;
 }

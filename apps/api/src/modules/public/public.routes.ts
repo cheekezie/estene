@@ -57,11 +57,13 @@ export async function publicRoutes(app: FastifyInstance) {
       );
       const { lines, subtotal, total } = shipment.estimate;
       const payment =
-        shipment.paymentMethod === 'online'
-          ? { checkout: await PaymentsService.startCheckout(shipment.id, 'booking') }
-          : shipment.paymentMethod === 'transfer'
-            ? { transfer: await PaymentsService.startTransfer(shipment.id, 'booking') }
-            : null;
+        shipment.paymentMethod === 'online' || shipment.paymentMethod === 'transfer'
+          ? await PaymentsService.startPayment(
+              shipment.id,
+              shipment.paymentMethod === 'transfer' ? 'transfer' : 'checkout',
+              'booking',
+            )
+          : null;
       return send(
         reply,
         {
@@ -108,9 +110,10 @@ export async function publicRoutes(app: FastifyInstance) {
       if (!doc) throw notFound('We could not find a parcel with that tracking number');
       return send(
         reply,
-        channel === 'checkout'
-          ? { checkout: await PaymentsService.startCheckout(doc.id) }
-          : { transfer: await PaymentsService.startTransfer(doc.id) },
+        await PaymentsService.startPayment(
+          doc.id,
+          channel === 'transfer' ? 'transfer' : 'checkout',
+        ),
       );
     },
   );

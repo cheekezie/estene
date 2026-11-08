@@ -45,11 +45,13 @@ export async function shipmentsRoutes(app: FastifyInstance) {
     });
     // Prepaid phone bookings: an account number staff can read out, or a pay link by SMS.
     const payment =
-      shipment.paymentMethod === 'transfer'
-        ? { transfer: await PaymentsService.startTransfer(shipment.id, 'booking') }
-        : shipment.paymentMethod === 'online'
-          ? { checkout: await PaymentsService.startCheckout(shipment.id, 'booking') }
-          : null;
+      shipment.paymentMethod === 'transfer' || shipment.paymentMethod === 'online'
+        ? await PaymentsService.startPayment(
+            shipment.id,
+            shipment.paymentMethod === 'transfer' ? 'transfer' : 'checkout',
+            'booking',
+          )
+        : null;
     if (payment) bus.emit('payment.link_requested', { shipmentId: shipment.id });
     return send(reply, { ...toShipmentDto(shipment), payment }, 201, 'Shipment booked');
   });

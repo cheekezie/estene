@@ -10,7 +10,8 @@ export class AppError extends Error {
   }
 }
 
-export const badRequest = (msg = 'Bad request', code = 'BAD_REQUEST') => new AppError(400, msg, code);
+export const badRequest = (msg = 'Bad request', code = 'BAD_REQUEST') =>
+  new AppError(400, msg, code);
 export const unauthorized = (msg = 'Unauthorized') => new AppError(401, msg, 'UNAUTHORIZED');
 export const forbidden = (msg = 'Forbidden') => new AppError(403, msg, 'FORBIDDEN');
 export const notFound = (msg = 'Not found') => new AppError(404, msg, 'NOT_FOUND');

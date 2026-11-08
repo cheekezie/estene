@@ -87,19 +87,19 @@ export const FinanceService = {
     await post(entries);
   },
 
-  /** Delivered on-account charges minus payments received for that client. */
+  /** Delivered on-account charges and storage fees minus payments received for that client. */
   async clientOutstanding(clientId: string) {
     const rows = await LedgerEntryModel.aggregate<{ _id: LedgerEntryType; total: number }>([
       {
         $match: {
           client: new Types.ObjectId(clientId),
-          type: { $in: ['shipment_charge', 'payment_received'] },
+          type: { $in: ['shipment_charge', 'storage_fee', 'payment_received'] },
         },
       },
       { $group: { _id: '$type', total: { $sum: '$amount' } } },
     ]);
     const t = Object.fromEntries(rows.map((r) => [r._id, r.total]));
-    return (t.shipment_charge ?? 0) - (t.payment_received ?? 0);
+    return (t.shipment_charge ?? 0) + (t.storage_fee ?? 0) - (t.payment_received ?? 0);
   },
 
   /**
@@ -201,6 +201,22 @@ export const FinanceService = {
         note: payout.method === 'manual' ? 'Recorded manually' : 'Bank transfer',
         createdBy: payout.initiatedBy,
         idempotencyKey: `payout:${payoutId}`,
+      },
+    ]);
+  },
+
+  /** One warehousing client's flat fee for one month (`YYYY-MM`). Safe to re-run. */
+  async recordStorageFee(clientId: string, month: string, amount: number) {
+    if (amount <= 0) return;
+    await post([
+      {
+        type: 'storage_fee',
+        amount,
+        account: 'customer',
+        client: new Types.ObjectId(clientId),
+        reference: `STORAGE-${month}`,
+        note: `Warehousing fee for ${month}`,
+        idempotencyKey: `storage:${clientId}:${month}`,
       },
     ]);
   },

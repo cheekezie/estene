@@ -1,6 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Banknote,
+  Boxes,
+  PackageOpen,
+  PackagePlus,
   Bike,
   Building,
   Building2,
@@ -40,6 +43,29 @@ export const NAV_SECTIONS: { title?: string; items: NavItem[] }[] = [
         to: '/manifests',
         icon: Truck,
         roles: ['office_agent', 'ops_manager', 'dispatcher'],
+      },
+    ],
+  },
+  {
+    title: 'Warehouse',
+    items: [
+      {
+        label: 'Orders',
+        to: '/warehouse/orders',
+        icon: PackageOpen,
+        roles: ['ops_manager', 'office_agent', 'support'],
+      },
+      {
+        label: 'Stock',
+        to: '/warehouse/stock',
+        icon: Boxes,
+        roles: ['ops_manager', 'office_agent', 'support'],
+      },
+      {
+        label: 'Inbound',
+        to: '/warehouse/inbound',
+        icon: PackagePlus,
+        roles: ['ops_manager', 'office_agent', 'support'],
       },
     ],
   },

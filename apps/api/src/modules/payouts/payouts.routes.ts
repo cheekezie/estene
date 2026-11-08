@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { NIGERIAN_BANKS } from '@estene/contracts/banks';
 import { ObjectIdSchema } from '@estene/contracts/common';
 import {
   BankAccountInputSchema,
@@ -10,6 +9,7 @@ import {
 } from '@estene/contracts/payout';
 import { parse, send } from '../../lib/response';
 import { requireActor, requireRole } from '../../plugins/auth';
+import { gateway } from '../payments/providers';
 import { PayoutsService } from './payouts.service';
 
 const IdParams = z.object({ id: ObjectIdSchema });
@@ -20,7 +20,8 @@ export async function payoutsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireActor('admin'));
   app.addHook('preHandler', requireRole('finance'));
 
-  app.get('/banks', async (_req, reply) => send(reply, NIGERIAN_BANKS));
+  // The gateway's own bank codes — payouts must use the codes it understands.
+  app.get('/banks', async (_req, reply) => send(reply, await gateway.listBanks()));
   app.get('/earnings', async (_req, reply) => send(reply, await PayoutsService.earnings()));
   app.get('/earnings/:id', async (req, reply) =>
     send(reply, await PayoutsService.riderEarnings(parse(IdParams, req.params).id)),

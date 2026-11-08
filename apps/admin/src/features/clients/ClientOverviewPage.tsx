@@ -8,9 +8,10 @@ import { formatPhone } from '@estene/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@estene/ui/card';
 import { StatTile } from '@/shared/components/StatTile';
 import { useClientContext } from './ClientLayout';
+import { PortalUsersCard } from './components/PortalUsersCard';
 
 export default function ClientOverviewPage() {
-  const { client: c } = useClientContext();
+  const { client: c, canManage } = useClientContext();
   const overLimit = c.billing.creditLimit != null && c.stats.outstanding > c.billing.creditLimit;
 
   return (
@@ -156,6 +157,8 @@ export default function ClientOverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      <PortalUsersCard clientId={c.id} canManage={canManage} />
     </div>
   );
 }

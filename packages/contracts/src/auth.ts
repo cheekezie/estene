@@ -26,6 +26,8 @@ export type TokenClaims = {
   role?: AdminRole;
   /** Office agents only: the office they work at. */
   officeId?: string;
+  /** Client portal users only: the business they belong to. */
+  clientId?: string;
 };
 
 export type AuthSession<TUser> = { accessToken: string; user: TUser };

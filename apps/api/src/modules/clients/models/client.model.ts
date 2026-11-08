@@ -50,6 +50,16 @@ export interface IClient {
   status: ClientStatus;
   apiKeys: Types.DocumentArray<IApiKey>;
   webhook?: { url: string; events: WebhookEvent[]; isActive: boolean; secretCipher: string };
+  /** Store-and-ship: we hold the client's stock at `office` and bill a flat monthly fee. */
+  warehousing?: {
+    enabled: boolean;
+    office: Types.ObjectId;
+    monthlyFee: number;
+    lowStockThreshold: number;
+    enabledAt?: Date;
+    /** Set when switched off, so the last part-month is still billed. */
+    disabledAt?: Date;
+  };
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -107,6 +117,20 @@ const clientSchema = new Schema<IClient>(
       ),
       required: false,
     },
+    warehousing: {
+      type: new Schema(
+        {
+          enabled: { type: Boolean, default: false },
+          office: { type: Schema.Types.ObjectId, ref: 'Office', required: true },
+          monthlyFee: { type: Number, default: 0, min: 0, validate: Number.isInteger },
+          lowStockThreshold: { type: Number, default: 5 },
+          enabledAt: Date,
+          disabledAt: Date,
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
   },
   { timestamps: true },
@@ -117,5 +141,6 @@ clientSchema.index(
   { unique: true, partialFilterExpression: { 'apiKeys.hash': { $type: 'string' } } },
 );
 clientSchema.index({ name: 1 });
+clientSchema.index({ 'warehousing.enabled': 1 });
 
 export const ClientModel = model<IClient>('Client', clientSchema);

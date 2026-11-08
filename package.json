@@ -18,10 +18,13 @@
     "dev:api": "turbo dev --filter @estene/api",
     "dev:admin": "turbo dev --filter @estene/admin",
     "dev:web": "turbo dev --filter @estene/web",
+    "dev:portal": "turbo dev --filter @estene/portal",
     "build:api": "turbo build --filter @estene/api",
     "build:admin": "turbo build --filter @estene/admin",
     "build:web": "turbo build --filter @estene/web",
+    "build:portal": "turbo build --filter @estene/portal",
     "preview:admin": "pnpm --filter @estene/admin preview",
+    "preview:portal": "pnpm --filter @estene/portal preview",
     "start:api": "pnpm --filter @estene/api start",
     "start:web": "pnpm --filter @estene/web start",
     "seed": "pnpm --filter @estene/api seed"

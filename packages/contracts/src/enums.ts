@@ -102,8 +102,19 @@ export const WEBHOOK_EVENTS = [
   'shipment.delivery_failed',
   'shipment.returned',
   'shipment.cancelled',
+  // Warehousing clients only.
+  'order.created',
+  'order.stock_reserved',
+  'order.shipped',
+  'order.delivered',
+  'order.returned',
+  'order.cancelled',
+  'inbound.received',
+  'stock.low',
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export type ShipmentWebhookEvent = Extract<WebhookEvent, `shipment.${string}`>;
+export type WarehouseWebhookEvent = Exclude<WebhookEvent, ShipmentWebhookEvent>;
 
 /**
  * Derived from amount paid vs. amount owed. `partially_paid` happens when the
@@ -170,6 +181,7 @@ export const LEDGER_ENTRY_TYPES = [
   'cash_collected', // rider holds customer cash — rider owes us
   'cash_remitted', // rider handed cash back
   'payout', // we paid a partner rider
+  'storage_fee', // monthly warehousing fee billed to a business client
   'adjustment',
 ] as const;
 export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];

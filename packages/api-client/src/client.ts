@@ -11,6 +11,8 @@ export interface ApiClientOptions {
   onTokenRefreshed?: (token: string) => void;
   onAuthFailure?: () => void;
   timeout?: number;
+  /** Where the 401 flow refreshes the access token. The client portal uses its own path and cookie. */
+  refreshPath?: string;
 }
 
 type RetryConfig = AxiosRequestConfig & { _retry?: boolean };
@@ -22,7 +24,11 @@ type RetryConfig = AxiosRequestConfig & { _retry?: boolean };
  * concurrent 401s share a single refresh.
  */
 export function createApiClient(opts: ApiClientOptions) {
-  const http = axios.create({ baseURL: opts.baseURL, withCredentials: true, timeout: opts.timeout ?? 20_000 });
+  const http = axios.create({
+    baseURL: opts.baseURL,
+    withCredentials: true,
+    timeout: opts.timeout ?? 20_000,
+  });
 
   http.interceptors.request.use((config) => {
     const token = opts.getAccessToken?.();
@@ -36,10 +42,16 @@ export function createApiClient(opts: ApiClientOptions) {
     const original = error.config as RetryConfig | undefined;
     const isAuthCall = original?.url?.startsWith('/auth/');
 
-    if (error.response?.status === 401 && original && !original._retry && !isAuthCall && opts.getAccessToken) {
+    if (
+      error.response?.status === 401 &&
+      original &&
+      !original._retry &&
+      !isAuthCall &&
+      opts.getAccessToken
+    ) {
       original._retry = true;
       refreshing ??= http
-        .post<ApiSuccess<{ accessToken: string }>>('/auth/refresh')
+        .post<ApiSuccess<{ accessToken: string }>>(opts.refreshPath ?? '/auth/refresh')
         .then(({ data }) => {
           opts.onTokenRefreshed?.(data.data.accessToken);
           return data.data.accessToken;

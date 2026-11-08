@@ -19,7 +19,14 @@ import {
 } from '../clients.queries';
 import { SecretReveal } from './SecretReveal';
 
-const GROUPS: WebhookEventGroup[] = ['Booking', 'Rider', 'On the move', 'Outcome', 'Billing'];
+const GROUPS: WebhookEventGroup[] = [
+  'Booking',
+  'Rider',
+  'On the move',
+  'Outcome',
+  'Billing',
+  'Warehouse',
+];
 const eventsIn = (g: WebhookEventGroup) =>
   WEBHOOK_EVENTS.filter((e) => WEBHOOK_EVENT_META[e].group === g);
 

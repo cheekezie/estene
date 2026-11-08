@@ -14,7 +14,12 @@ export async function pricingRoutes(app: FastifyInstance) {
   app.get('/config', async (_req, reply) => send(reply, await PricingService.getConfig()));
 
   app.put('/config', canEdit, async (req, reply) =>
-    send(reply, await PricingService.updateConfig(parse(PlatformSettingsSchema, req.body), req.user.sub), 200, 'Pricing updated'),
+    send(
+      reply,
+      await PricingService.updateConfig(parse(PlatformSettingsSchema, req.body), req.user.sub),
+      200,
+      'Pricing updated',
+    ),
   );
 
   app.get('/routes', async (_req, reply) => send(reply, await PricingService.listRouteRates()));

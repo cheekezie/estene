@@ -48,7 +48,17 @@ export const PresenceService = {
   /** Online riders within `radiusKm` of a point, nearest first. Stale GEO entries are pruned. */
   async nearby(point: GeoPoint, radiusKm: number, limit = 30): Promise<NearbyRider[]> {
     const raw = (await redis.geosearch(
-      GEO_KEY, 'FROMLONLAT', point.lng, point.lat, 'BYRADIUS', radiusKm, 'km', 'ASC', 'COUNT', limit, 'WITHDIST',
+      GEO_KEY,
+      'FROMLONLAT',
+      point.lng,
+      point.lat,
+      'BYRADIUS',
+      radiusKm,
+      'km',
+      'ASC',
+      'COUNT',
+      limit,
+      'WITHDIST',
     )) as [string, string][];
 
     const candidates = raw.map(([riderId, dist]) => ({ riderId, distanceKm: Number(dist) }));

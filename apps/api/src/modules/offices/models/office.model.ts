@@ -13,6 +13,8 @@ export interface IOffice {
   openingHours: string;
   location?: { type: 'Point'; coordinates: [number, number] };
   isActive: boolean;
+  /** Holds business clients' stock (warehousing). */
+  isWarehouse: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +34,7 @@ const officeSchema = new Schema<IOffice>(
       coordinates: { type: [Number], default: undefined },
     },
     isActive: { type: Boolean, default: true, index: true },
+    isWarehouse: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

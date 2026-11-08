@@ -37,7 +37,13 @@ import {
 
 export type Actor = { type: ActorType | 'system'; id?: string };
 
-export type CreateOptions = { source: ShipmentSource; clientId?: string; clientReference?: string };
+export type CreateOptions = {
+  source: ShipmentSource;
+  clientId?: string;
+  clientReference?: string;
+  /** Warehousing order being packed into this shipment. */
+  orderId?: string;
+};
 
 const isDuplicateKey = (err: unknown) => (err as { code?: number }).code === 11000;
 
@@ -384,6 +390,7 @@ export const ShipmentsService = {
         source: opts.source,
         client: opts.clientId ?? null,
         clientReference: opts.clientReference,
+        order: opts.orderId ?? null,
         pickup: toStopDoc(pickup),
         dropoff: toStopDoc(dropoff),
         fulfilment,

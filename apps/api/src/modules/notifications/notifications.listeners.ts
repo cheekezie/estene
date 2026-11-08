@@ -1,7 +1,9 @@
 import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { bus } from '../../lib/events';
 import { getQueue, startWorker } from '../../lib/queue';
+import { ClientModel } from '../clients/models/client.model';
 import { OfficeModel } from '../offices/models/office.model';
+import { StockLevelModel } from '../warehousing/models/stock-level.model';
 import { PaymentModel } from '../payments/models/payment.model';
 import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
@@ -52,10 +54,12 @@ export function registerNotifications() {
       ShipmentModel.findById(shipmentId, 'trackingNumber pickup.phone').lean(),
       PaymentModel.findById(paymentId).lean(),
     ]);
-    if (!shipment || !payment?.virtualAccount) return;
+    if (!shipment || !payment) return;
     await queueSms({
       to: shipment.pickup.phone,
-      body: templates.balanceDue(shipment.trackingNumber, payment.amount, payment.virtualAccount),
+      body: payment.virtualAccount
+        ? templates.balanceDue(shipment.trackingNumber, payment.amount, payment.virtualAccount)
+        : templates.balanceDueOnline(shipment.trackingNumber, payment.amount),
       template: 'sender.balance_due',
       shipmentId,
     });
@@ -137,6 +141,28 @@ export function registerNotifications() {
         shipmentId,
       });
     }
+  });
+
+  // Warehousing clients hear about low stock on their contact number (the webhook covers integrators).
+  bus.on('stock.low', async ({ clientId, productId, officeId }) => {
+    const [client, level] = await Promise.all([
+      ClientModel.findById(clientId, 'contact.phone status').lean(),
+      StockLevelModel.findOne({ product: productId, office: officeId })
+        .populate<{ product: { sku: string; name: string } }>('product', 'sku name')
+        .populate<{ office: { code: string } }>('office', 'code')
+        .lean(),
+    ]);
+    if (client?.status !== 'active' || !level) return;
+    await queueSms({
+      to: client.contact.phone,
+      body: templates.lowStock(
+        level.product.name,
+        level.product.sku,
+        level.onHand - level.reserved,
+        level.office.code,
+      ),
+      template: 'client.low_stock',
+    });
   });
 
   startWorker(QUEUE, async (job) => {

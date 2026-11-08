@@ -7,7 +7,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   CORS_ORIGINS: z
     .string()
-    .default('http://localhost:5400,http://localhost:3100')
+    .default('http://localhost:5400,http://localhost:3100,http://localhost:5500')
     .transform((v) =>
       v
         .split(',')
@@ -26,24 +26,44 @@ const envSchema = z.object({
   API_PUBLIC_URL: z.string().default('http://localhost:4000'),
 
   // ── Payments ────────────────────────────────────────────────────────────
-  /**
-   * Only the development simulator exists today; the SaySwitch gateway plugs
-   * in behind the same PaymentGateway interface (modules/payments/providers).
-   */
-  PAYMENTS_PROVIDER: z.enum(['simulator']).default('simulator'),
+  /** One gateway for money in (customer payments) and money out (rider payouts). `simulator` for local work. */
+  PAYMENTS_PROVIDER: z.enum(['simulator', 'saukipay', 'sayswitch']).default('simulator'),
+
+  SAUKIPAY_BASE_URL: z.url().default('https://server.saukipay.net/api/v1'),
+  /** Bearer key for API calls; SaukiPay also sends it back in the webhook `ApiKey` header. */
+  SAUKIPAY_SECRET_KEY: z.string().trim().optional(),
+  SAUKIPAY_PUBLIC_KEY: z.string().trim().optional(),
+  /** How SaukiPay reads `amount`: naira. */
+  SAUKIPAY_AMOUNT_UNIT: z.enum(['naira', 'kobo']).default('naira'),
+
+  SAYSWITCH_BASE_URL: z.url().default('https://backendapi.sayswitchgroup.com'),
+  /** sk_test_… or sk_live_… — authenticates API calls and signs webhooks. */
+  SAYSWITCH_SECRET_KEY: z.string().trim().optional(),
+  /** pk_test_… or pk_live_… — not used server-side today; kept with the secret for completeness. */
+  SAYSWITCH_PUBLIC_KEY: z.string().trim().optional(),
+  /** How SaySwitch reads `amount`. The docs disagree; confirm with a sandbox payment. */
+  SAYSWITCH_AMOUNT_UNIT: z.enum(['naira', 'kobo']).default('naira'),
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().default('Estene'),
 });
 
 const parsed = envSchema
   .superRefine((e, ctx) => {
-    if (e.NODE_ENV === 'production' && e.PAYMENTS_PROVIDER === 'simulator') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['PAYMENTS_PROVIDER'],
-        message: 'The payment simulator cannot run in production',
-      });
+    const issue = (path: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [path], message });
+    if (e.NODE_ENV === 'production') {
+      if (e.PAYMENTS_PROVIDER === 'simulator')
+        issue('PAYMENTS_PROVIDER', 'The payment simulator cannot run in production');
+      if (e.PAYMENTS_PROVIDER === 'sayswitch' && e.SAYSWITCH_SECRET_KEY?.startsWith('sk_test_'))
+        issue('SAYSWITCH_SECRET_KEY', 'Production needs a live SaySwitch key (sk_live_…)');
     }
+    if (e.PAYMENTS_PROVIDER === 'saukipay' && !e.SAUKIPAY_SECRET_KEY)
+      issue('SAUKIPAY_SECRET_KEY', 'Set SAUKIPAY_SECRET_KEY to use SaukiPay');
+    if (e.PAYMENTS_PROVIDER === 'sayswitch' && !e.SAYSWITCH_SECRET_KEY?.startsWith('sk_'))
+      issue(
+        'SAYSWITCH_SECRET_KEY',
+        'Set SAYSWITCH_SECRET_KEY (sk_test_… or sk_live_…) to use SaySwitch',
+      );
   })
   .safeParse(process.env);
 if (!parsed.success) {

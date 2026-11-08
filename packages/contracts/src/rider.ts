@@ -1,22 +1,34 @@
 import { z } from 'zod';
-import { RIDER_STATUSES, RIDER_TYPES, VEHICLE_TYPES, type RiderStatus, type RiderType, type VehicleType } from './enums';
-import { GeoPointSchema, NigerianPhoneSchema, ObjectIdSchema, PaginationQuerySchema } from './common';
+import {
+  RIDER_STATUSES,
+  RIDER_TYPES,
+  VEHICLE_TYPES,
+  type RiderStatus,
+  type RiderType,
+  type VehicleType,
+} from './enums';
+import {
+  GeoPointSchema,
+  NigerianPhoneSchema,
+  ObjectIdSchema,
+  PaginationQuerySchema,
+} from './common';
 
 const RiderBaseSchema = z.object({
-    firstName: z.string().trim().min(2),
-    lastName: z.string().trim().min(2),
-    phone: NigerianPhoneSchema,
-    email: z.email().trim().toLowerCase().optional(),
-    type: z.enum(RIDER_TYPES),
-    vehicleType: z.enum(VEHICLE_TYPES),
-    plateNumber: z.string().trim().toUpperCase().optional(),
-    /** Riders in their primary zone get first priority for jobs there. */
-    primaryZoneId: ObjectIdSchema,
-    coverageZoneIds: z.array(ObjectIdSchema).default([]),
-    /** Partner riders only: our cut of each trip, percent. Falls back to the platform default. */
-    commissionPct: z.number().min(0).max(100).optional(),
-    /** Partner riders only: the fleet/company they ride for, if any. */
-    fleetName: z.string().trim().optional(),
+  firstName: z.string().trim().min(2),
+  lastName: z.string().trim().min(2),
+  phone: NigerianPhoneSchema,
+  email: z.email().trim().toLowerCase().optional(),
+  type: z.enum(RIDER_TYPES),
+  vehicleType: z.enum(VEHICLE_TYPES),
+  plateNumber: z.string().trim().toUpperCase().optional(),
+  /** Riders in their primary zone get first priority for jobs there. */
+  primaryZoneId: ObjectIdSchema,
+  coverageZoneIds: z.array(ObjectIdSchema).default([]),
+  /** Partner riders only: our cut of each trip, percent. Falls back to the platform default. */
+  commissionPct: z.number().min(0).max(100).optional(),
+  /** Partner riders only: the fleet/company they ride for, if any. */
+  fleetName: z.string().trim().optional(),
 });
 
 export const RiderInputSchema = RiderBaseSchema.refine(
