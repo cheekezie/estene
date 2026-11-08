@@ -123,12 +123,7 @@ const PaymentMethodSchema = z.enum(PAYMENT_METHODS);
 /** Public website booking. */
 export const CreateShipmentSchema = ShipmentBaseSchema.extend({
   paymentMethod: z.enum(CUSTOMER_PAYMENT_METHODS),
-})
-  .superRefine(checkModes)
-  .refine((s) => s.paymentMethod !== 'online' || !!s.senderEmail, {
-    path: ['senderEmail'],
-    message: 'Add an email for your payment receipt',
-  });
+}).superRefine(checkModes);
 export type CreateShipmentInput = z.infer<typeof CreateShipmentSchema>;
 
 /** Phone booking keyed in by staff — optionally on behalf of a business client. */

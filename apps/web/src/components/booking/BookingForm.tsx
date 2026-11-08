@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronUp, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   PARCEL_SIZES,
@@ -133,7 +133,8 @@ export function BookingForm({
   if (booked) return <BookingConfirmed {...booked} recipientPhone={draft.recipientPhone} />;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+    // Bottom padding on phones so the fixed price bar never covers the Continue button.
+    <div className="grid gap-8 pb-24 lg:grid-cols-[1fr_340px] lg:pb-0">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <Stepper step={step} />
 
@@ -466,6 +467,7 @@ export function BookingForm({
       </div>
 
       <QuoteSummary quote={quote} />
+      <MobileQuoteBar quote={quote} />
     </div>
   );
 }
@@ -540,9 +542,25 @@ function useLiveQuote(d: BookingDraft) {
   return state;
 }
 
-function QuoteSummary({ quote }: { quote: ReturnType<typeof useLiveQuote> }) {
+type LiveQuote = ReturnType<typeof useLiveQuote>;
+
+function QuoteLines({ quote }: { quote: NonNullable<LiveQuote['quote']> }) {
   return (
-    <aside className="lg:sticky lg:top-24 lg:self-start">
+    <ul className="space-y-2 text-sm">
+      {quote.lines.map((l) => (
+        <li key={l.code} className="flex justify-between gap-4">
+          <span className="text-blue-200">{humanize(l.label)}</span>
+          <span className="tabular">{formatNaira(l.amount)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Desktop: the full price card beside the form. */
+function QuoteSummary({ quote }: { quote: LiveQuote }) {
+  return (
+    <aside className="hidden lg:sticky lg:top-24 lg:block lg:self-start">
       <div className="rounded-2xl bg-blue-950 p-6 text-white shadow-xl">
         <p className="text-sm text-blue-200">Estimated price</p>
         <p
@@ -554,14 +572,9 @@ function QuoteSummary({ quote }: { quote: ReturnType<typeof useLiveQuote> }) {
         </p>
         {quote.error && <p className="mt-2 text-sm text-amber-300">{quote.error}</p>}
         {quote.quote ? (
-          <ul className="mt-5 space-y-2 border-t border-white/10 pt-4 text-sm">
-            {quote.quote.lines.map((l) => (
-              <li key={l.code} className="flex justify-between gap-4">
-                <span className="text-blue-200">{humanize(l.label)}</span>
-                <span className="tabular">{formatNaira(l.amount)}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <QuoteLines quote={quote.quote} />
+          </div>
         ) : (
           !quote.error && (
             <p className="mt-3 text-sm text-blue-200">
@@ -575,6 +588,51 @@ function QuoteSummary({ quote }: { quote: ReturnType<typeof useLiveQuote> }) {
 }
 
 /** Forwards id/aria props so the wrapping <Field> label and error are announced. */
+/** Phones: the price stays pinned to the bottom of the screen; tap for the breakdown. */
+function MobileQuoteBar({ quote }: { quote: LiveQuote }) {
+  const [open, setOpen] = useState(false);
+  const canOpen = !!quote.quote;
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 bg-blue-950 text-white shadow-[0_-8px_24px_rgba(0,0,0,0.18)] lg:hidden">
+      {open && quote.quote && (
+        <div id="price-breakdown" className="border-b border-white/10 px-4 pb-3 pt-4">
+          <QuoteLines quote={quote.quote} />
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => canOpen && setOpen((o) => !o)}
+        aria-expanded={canOpen ? open : undefined}
+        aria-controls={canOpen ? 'price-breakdown' : undefined}
+        className="flex w-full items-center justify-between gap-4 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-xs text-blue-200">Estimated price</span>
+          <span
+            className="tabular font-display flex items-center gap-2 text-2xl font-extrabold"
+            aria-live="polite"
+          >
+            {quote.quote ? formatNaira(quote.quote.total) : '—'}
+            {quote.loading && <Loader2 className="size-4 animate-spin text-blue-300" />}
+          </span>
+        </span>
+        <span className="shrink-0 text-right text-xs text-blue-200">
+          {quote.error ? (
+            <span className="text-amber-300">{quote.error}</span>
+          ) : canOpen ? (
+            <span className="inline-flex items-center gap-1">
+              {open ? 'Hide' : 'Breakdown'}
+              <ChevronUp className={cn('size-4 transition-transform', open && 'rotate-180')} />
+            </span>
+          ) : (
+            'Choose areas to see your price'
+          )}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function AreaSelect({
   zones,
   value,
@@ -639,9 +697,13 @@ function ChoiceCard({
 
 function Stepper({ step }: { step: number }) {
   return (
-    <ol className="flex items-center gap-2 text-sm">
+    <ol className="flex w-full items-center gap-2 text-sm">
       {STEPS.map((label, i) => (
-        <li key={label} className="flex flex-1 items-center gap-2">
+        // The last step has no connector after it, so it only takes its own width.
+        <li
+          key={label}
+          className={cn('flex items-center gap-2', i < STEPS.length - 1 ? 'flex-1' : 'flex-none')}
+        >
           <span
             className={cn(
               'grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold',
