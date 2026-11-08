@@ -86,7 +86,7 @@ never part of it.
 2. Add MongoDB and Redis services. Set `MONGODB_URI=${{MongoDB.MONGO_URL}}` and
    `REDIS_URL=${{Redis.REDIS_URL}}`.
 3. Set `NODE_ENV=production`, `JWT_SECRET`, `ENCRYPTION_KEY`, `CORS_ORIGINS`, `PUBLIC_SITE_URL`,
-   `API_PUBLIC_URL` and the payment keys (see `apps/api/.env.example`).
+   the payment keys and the `R2_*` settings (see `apps/api/.env.example`).
 4. Create the first admin from the service shell:
    `node dist/create-admin.js --email you@estene.ng --name "Your Name"`.
    `pnpm seed` is demo data and refuses to run in production.

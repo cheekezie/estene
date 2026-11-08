@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope', display: 'swap' });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(process.env.SITE_URL ?? 'http://localhost:3100'),
   title: {
     default: 'Estene — Parcel delivery across Abuja, interstate and by air',
     template: '%s · Estene',

@@ -21,7 +21,7 @@ export const SimulatorGateway: PaymentGateway & {
   },
 
   async checkoutSession({ reference, amount, returnUrl }) {
-    const checkoutUrl = `${env.API_PUBLIC_URL}/api/public/payments/${reference}/simulate?return=${encodeURIComponent(returnUrl)}`;
+    const checkoutUrl = `http://localhost:${env.PORT}/api/public/payments/${reference}/simulate?return=${encodeURIComponent(returnUrl)}`;
     return { reference, amount, provider: 'simulator', checkoutUrl };
   },
 

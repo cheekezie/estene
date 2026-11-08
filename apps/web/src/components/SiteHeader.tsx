@@ -25,7 +25,7 @@ export function SiteHeader() {
             How it works
           </Link>
           <Link
-            href="/#riders"
+            href="/ride"
             className="hidden rounded-md px-3 py-2 text-slate-600 hover:text-slate-900 sm:block"
           >
             Ride with us

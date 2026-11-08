@@ -1,46 +1,22 @@
-import { createHmac, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, normalize } from 'node:path';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { randomUUID } from 'node:crypto';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { UploadRequest, UploadTicketDto } from '@estene/contracts/upload';
-import { MAX_UPLOAD_BYTES } from '@estene/contracts/upload';
-import { env, useR2 } from '../../config/env';
-import { badRequest, notFound } from '../../lib/errors';
+import { env } from '../../config/env';
+import { assertR2, r2 } from '../../lib/r2';
 
 /**
- * Direct-to-storage uploads. The API never streams photos through itself in
- * production: it hands out a short-lived PUT URL for one object, and the
- * client uploads straight to the Cloudflare R2 bucket (R2 speaks the S3 API, hence the AWS SDK).
- *
- * Without R2 settings (development only) the API mimics that: the PUT URL points back at it,
- * signed with an HMAC, and files land in apps/api/.uploads.
+ * Delivery photos live in the public R2 bucket. The API never streams them
+ * through itself: it hands out a short-lived PUT URL for one object and the
+ * phone uploads straight to the bucket.
  */
 const TICKET_TTL_S = 10 * 60;
-const LOCAL_DIR = join(process.cwd(), '.uploads');
+const CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
 };
-
-let r2: S3Client | null = null;
-const r2Client = () =>
-  (r2 ??= new S3Client({
-    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    region: 'auto',
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID ?? '',
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? '',
-    },
-    // R2 addresses buckets by path on its account endpoint.
-    forcePathStyle: true,
-    // Newer SDKs sign a checksum into presigned URLs by default — a checksum of an
-    // empty body, so the real upload would be rejected. Only add one when required.
-    requestChecksumCalculation: 'WHEN_REQUIRED',
-    responseChecksumValidation: 'WHEN_REQUIRED',
-  }));
 
 /** Random, unguessable keys grouped by purpose and month: delivery_proof/2026/11/<uuid>.jpg */
 function newKey(purpose: string, contentType: string) {
@@ -49,102 +25,35 @@ function newKey(purpose: string, contentType: string) {
   return `${purpose}/${month}/${randomUUID()}.${EXT[contentType]}`;
 }
 
-const trimSlash = (s: string) => s.replace(/\/+$/, '');
-const publicBase = () =>
-  useR2 ? trimSlash(env.R2_PUBLIC_URL ?? '') : `${trimSlash(env.API_PUBLIC_URL)}/api/uploads/files`;
-
-// ── Local (development) signing ──
-const localSignature = (key: string, contentType: string, size: number, exp: number) =>
-  createHmac('sha256', env.JWT_SECRET)
-    .update(`${key}\n${contentType}\n${size}\n${exp}`)
-    .digest('hex');
+const publicBase = () => (env.R2_PUBLIC_URL ?? '').replace(/\/+$/, '');
 
 export const UploadsService = {
   async createTicket(req: UploadRequest): Promise<UploadTicketDto> {
+    assertR2(env.R2_BUCKET, 'Photo uploads');
     const key = newKey(req.purpose, req.contentType);
-    const expiresAt = new Date(Date.now() + TICKET_TTL_S * 1000);
-    const fileUrl = `${publicBase()}/${key}`;
-
-    if (useR2) {
-      const uploadUrl = await getSignedUrl(
-        r2Client(),
-        new PutObjectCommand({
-          Bucket: env.R2_BUCKET,
-          Key: key,
-          ContentType: req.contentType,
-          ContentLength: req.size,
-          CacheControl: 'public, max-age=31536000, immutable',
-        }),
-        { expiresIn: TICKET_TTL_S },
-      );
-      return {
-        uploadUrl,
-        method: 'PUT',
-        headers: {
-          'Content-Type': req.contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
-        },
-        fileUrl,
-        expiresAt: expiresAt.toISOString(),
-      };
-    }
-
-    const exp = Math.floor(expiresAt.getTime() / 1000);
-    const params = new URLSearchParams({
-      key,
-      ct: req.contentType,
-      size: String(req.size),
-      exp: String(exp),
-      sig: localSignature(key, req.contentType, req.size, exp),
-    });
+    const uploadUrl = await getSignedUrl(
+      r2(),
+      new PutObjectCommand({
+        Bucket: env.R2_BUCKET,
+        Key: key,
+        ContentType: req.contentType,
+        ContentLength: req.size,
+        CacheControl: CACHE_CONTROL,
+      }),
+      { expiresIn: TICKET_TTL_S },
+    );
     return {
-      uploadUrl: `${trimSlash(env.API_PUBLIC_URL)}/api/uploads/local?${params}`,
+      uploadUrl,
       method: 'PUT',
-      headers: { 'Content-Type': req.contentType },
-      fileUrl,
-      expiresAt: expiresAt.toISOString(),
+      headers: { 'Content-Type': req.contentType, 'Cache-Control': CACHE_CONTROL },
+      fileUrl: `${publicBase()}/${key}`,
+      expiresAt: new Date(Date.now() + TICKET_TTL_S * 1000).toISOString(),
     };
   },
 
-  /** True when a URL points at a file we stored — clients can't attach arbitrary links as proof. */
+  /** True when a URL points at a file in our bucket — clients can't attach arbitrary links as proof. */
   isOurFile(url: string) {
-    return url.startsWith(`${publicBase()}/`);
-  },
-
-  // ── Disk stand-in endpoints (development without R2) ──
-
-  async saveLocal(
-    q: { key: string; ct: string; size: string; exp: string; sig: string },
-    contentType: string | undefined,
-    body: Buffer,
-  ) {
-    const exp = Number(q.exp);
-    const size = Number(q.size);
-    const expected = localSignature(q.key, q.ct, size, exp);
-    if (q.sig !== expected || exp * 1000 < Date.now())
-      throw badRequest('Upload link expired or invalid', 'UPLOAD_EXPIRED');
-    if (contentType !== q.ct) throw badRequest('Content-Type does not match the upload link');
-    if (body.length !== size || size > MAX_UPLOAD_BYTES)
-      throw badRequest('File size does not match the upload link');
-    const path = localPath(q.key);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, body);
-    return null;
-  },
-
-  async openLocal(key: string) {
-    const path = localPath(key);
-    const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) throw notFound('File not found');
-    const ext = path.split('.').pop() ?? '';
-    const type = Object.entries(EXT).find(([, e]) => e === ext)?.[0] ?? 'application/octet-stream';
-    return { stream: createReadStream(path), type, size: info.size };
+    const base = publicBase();
+    return Boolean(base) && url.startsWith(`${base}/`);
   },
 };
-
-/** Keeps a key inside the uploads folder (no ../ escapes). */
-function localPath(key: string) {
-  const path = normalize(join(LOCAL_DIR, key));
-  if (!path.startsWith(LOCAL_DIR + '/')) throw badRequest('Invalid file key');
-  return path;
-}

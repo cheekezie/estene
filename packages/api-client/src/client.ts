@@ -87,6 +87,15 @@ export function createApiClient(opts: ApiClientOptions) {
     put: <T>(url: string, body?: unknown) => unwrap<T>(http.put(url, body)),
     patch: <T>(url: string, body?: unknown) => unwrap<T>(http.patch(url, body)),
     delete: <T>(url: string) => unwrap<T>(http.delete(url)),
+    /** Sends a file as the raw request body (no multipart), typed by the file's own type. */
+    upload: <T>(url: string, file: Blob, params?: object) =>
+      unwrap<T>(
+        http.post(url, file, {
+          params,
+          headers: { 'Content-Type': file.type },
+          timeout: 120_000,
+        }),
+      ),
   };
 }
 

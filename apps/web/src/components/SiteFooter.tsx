@@ -41,7 +41,7 @@ export function SiteFooter() {
           <p className="text-sm font-semibold text-white">Company</p>
           <ul className="mt-3 space-y-2 text-sm">
             <li>
-              <Link href="/#riders" className="hover:text-white">
+              <Link href="/ride" className="hover:text-white">
                 Ride with Estene
               </Link>
             </li>

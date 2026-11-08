@@ -27,7 +27,8 @@
     "./manifest": "./src/manifest.ts",
     "./warehouse": "./src/warehouse.ts",
     "./portal": "./src/portal.ts",
-    "./upload": "./src/upload.ts"
+    "./upload": "./src/upload.ts",
+    "./rider-application": "./src/rider-application.ts"
   },
   "dependencies": {
     "zod": "^4.1.0"

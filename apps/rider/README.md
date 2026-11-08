@@ -40,6 +40,9 @@ Background location, push and the camera scanner use native modules, so the app 
    EXPO_PUBLIC_API_URL=http://<your-LAN-ip>:4000 pnpm dev:rider
    ```
 
+   Delivery photos upload straight to R2, so fill in the `R2_*` settings in `apps/api/.env`
+   before testing pickup or delivery.
+
 3. Open the dev build on the phone and sign in with a seeded rider: `08030000001` or
    `08030000002`, password `rider1234`.
 

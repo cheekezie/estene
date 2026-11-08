@@ -1,21 +1,22 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Banknote,
-  Boxes,
-  PackageOpen,
-  PackagePlus,
   Bike,
+  Boxes,
   Building,
   Building2,
-  ScanLine,
-  Truck,
   HandCoins,
-  Receipt,
   LayoutDashboard,
   Map,
   Package,
+  PackageOpen,
+  PackagePlus,
   QrCode,
+  Receipt,
+  ScanLine,
   Tags,
+  Truck,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import type { AdminRole } from '@estene/contracts/enums';
@@ -73,6 +74,12 @@ export const NAV_SECTIONS: { title?: string; items: NavItem[] }[] = [
     title: 'Network',
     items: [
       { label: 'Riders', to: '/riders', icon: Bike },
+      {
+        label: 'Rider applications',
+        to: '/rider-applications',
+        icon: UserPlus,
+        roles: ['ops_manager'],
+      },
       { label: 'Zones', to: '/zones', icon: Map },
       { label: 'Offices', to: '/offices', icon: Building },
       { label: 'Parcel tags', to: '/tags', icon: QrCode },

@@ -8,6 +8,15 @@ type Account = { accountNumber: string; bankName: string; accountName: string };
 
 /** SMS copy. Kept under 160 chars where possible — every extra segment costs money. */
 export const templates = {
+  riderApplicationReceived: (firstName: string, ref: string) =>
+    `Estene: thanks ${firstName}, we got your rider application (${ref}). We'll call you to book a vetting visit at our office.`,
+
+  riderVetting: (ref: string, when?: string, office?: { name: string; address: string }) =>
+    `Estene: your rider vetting is${when ? ` on ${when}` : ''}${office ? ` at ${office.name}, ${office.address}` : ''}. Bring your ID, licence, passport photo and vehicle papers. Ref ${ref}.`,
+
+  riderApproved: (firstName: string) =>
+    `Estene: welcome aboard, ${firstName}! You're approved to ride. Install the Estene Rider app and sign in with this phone number.`,
+
   payOnline: (tn: string) =>
     `Estene: complete payment for ${tn} to dispatch a rider. Pay online: ${TRACK_URL}/${tn}`,
 

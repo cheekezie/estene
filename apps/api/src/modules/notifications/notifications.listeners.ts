@@ -10,6 +10,7 @@ import { ShipmentsService } from '../shipments/shipments.service';
 import type { RiderPushData } from '@estene/contracts/rider';
 import { RiderModel } from '../riders/models/rider.model';
 import { DispatchOfferModel } from '../dispatch/models/dispatch-offer.model';
+import { RiderApplicationsService } from '../rider-applications/rider-applications.service';
 import { sendPush, type PushMessage } from './channels/push';
 import { sms } from './channels/sms';
 import { NotificationLogModel } from './models/notification-log.model';
@@ -31,6 +32,35 @@ type PushJob = { riderId: string; messages: PushMessage[] };
  * so a slow SMS gateway never slows down a rider's scan.
  */
 export function registerNotifications() {
+  // Rider applicants: a text at each step of applying.
+  bus.on('rider_application.submitted', async ({ applicationId }) => {
+    const a = await RiderApplicationsService.smsDetails(applicationId);
+    if (a)
+      await queueSms({
+        to: a.phone,
+        body: templates.riderApplicationReceived(a.firstName, a.reference),
+        template: 'rider_application_received',
+      });
+  });
+  bus.on('rider_application.vetting_scheduled', async ({ applicationId }) => {
+    const a = await RiderApplicationsService.smsDetails(applicationId);
+    if (a)
+      await queueSms({
+        to: a.phone,
+        body: templates.riderVetting(a.reference, a.when, a.office),
+        template: 'rider_application_vetting',
+      });
+  });
+  bus.on('rider_application.approved', async ({ applicationId }) => {
+    const a = await RiderApplicationsService.smsDetails(applicationId);
+    if (a)
+      await queueSms({
+        to: a.phone,
+        body: templates.riderApproved(a.firstName),
+        template: 'rider_application_approved',
+      });
+  });
+
   // Phone bookings paid by transfer/online: send the payment details.
   bus.on('payment.link_requested', async ({ shipmentId }) => {
     const shipment = await ShipmentModel.findById(

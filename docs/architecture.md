@@ -101,8 +101,24 @@ with the pricing version.
 - **Photos:** `POST /rider/uploads` returns a short-lived PUT URL for one object (`modules/uploads`).
   The phone uploads straight to the Cloudflare R2 bucket, then sends `photoUrl`. Files are read from
   the bucket's public custom domain under random keys. Proof URLs must point at our
-  storage. Without R2 settings (development only), photos are kept on disk under `apps/api/.uploads`.
+  storage.
 - **Money:** `/rider/earnings`, `/rider/payouts` and `/rider/history`.
+
+### Rider applications (`modules/rider-applications`)
+
+- **Apply:** the website's `/ride` form posts to `POST /public/rider-applications` (5 an hour per IP).
+  One open application per phone; existing riders are turned away. The applicant gets an SMS
+  with their `AP-` reference.
+- **Review:** in the admin under Rider applications (ops managers only). Ops calls the applicant
+  and records the vetting time and office. With a time or office set, the applicant gets an SMS
+  with the address and what to bring.
+- **Documents:** at vetting, ops scans or photographs what the applicant brought and uploads it.
+  The file goes through the API, which checks its type from its first bytes, into the
+  private R2 bucket `R2_DOCUMENTS_BUCKET`. It is only opened through 5-minute signed links,
+  never a public URL.
+- **Approve:** needs a government ID, a licence and a passport photo on file. It creates the
+  rider (active), shows a one-time password for ops to hand over, and SMSes the applicant.
+  Rejecting records a reason; ops tells the applicant.
 
 ### Shipment channels and business clients
 

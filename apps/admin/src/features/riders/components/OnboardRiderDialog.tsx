@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Check, Copy } from 'lucide-react';
@@ -18,20 +18,41 @@ type FormIn = z.input<typeof RiderInputSchema>;
 type FormOut = z.output<typeof RiderInputSchema>;
 
 const TYPE_COPY = {
-  company: { title: 'Company rider', body: 'On payroll, rides an Estene vehicle. Full fare is Estene revenue.' },
-  partner: { title: 'Partner rider', body: 'Independent or fleet-owned. Keeps the fare minus our commission.' },
+  company: {
+    title: 'Company rider',
+    body: 'On payroll, rides an Estene vehicle. Full fare is Estene revenue.',
+  },
+  partner: {
+    title: 'Partner rider',
+    body: 'Independent or fleet-owned. Keeps the fare minus our commission.',
+  },
 } as const;
 
-export function OnboardRiderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function OnboardRiderDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const zones = useZones();
   const create = useCreateRider();
-  const [created, setCreated] = useState<{ name: string; phone: string; tempPassword: string } | null>(null);
+  const [created, setCreated] = useState<{
+    name: string;
+    phone: string;
+    tempPassword: string;
+  } | null>(null);
 
   const form = useForm<FormIn, unknown, FormOut>({
     resolver: zodResolver(RiderInputSchema),
     defaultValues: { type: 'company', vehicleType: 'bike', coverageZoneIds: [] },
   });
-  const { register, handleSubmit, setValue, formState: { errors } } = form;
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = form;
   const type = useWatch({ control: form.control, name: 'type' });
   const primaryZoneId = useWatch({ control: form.control, name: 'primaryZoneId' });
   const coverage = useWatch({ control: form.control, name: 'coverageZoneIds' }) ?? [];
@@ -45,9 +66,17 @@ export function OnboardRiderDialog({ open, onOpenChange }: { open: boolean; onOp
   };
 
   const onSubmit = handleSubmit((input) => {
-    const payload = input.type === 'company' ? { ...input, commissionPct: undefined, fleetName: undefined } : input;
+    const payload =
+      input.type === 'company'
+        ? { ...input, commissionPct: undefined, fleetName: undefined }
+        : input;
     create.mutate(payload, {
-      onSuccess: ({ rider, tempPassword }) => setCreated({ name: `${rider.firstName} ${rider.lastName}`, phone: rider.phone, tempPassword }),
+      onSuccess: ({ rider, tempPassword }) =>
+        setCreated({
+          name: `${rider.firstName} ${rider.lastName}`,
+          phone: rider.phone,
+          tempPassword,
+        }),
     });
   });
 
@@ -66,65 +95,128 @@ export function OnboardRiderDialog({ open, onOpenChange }: { open: boolean; onOp
                   role="radio"
                   aria-checked={type === t}
                   onClick={() => setValue('type', t)}
-                  className={cn('rounded-lg border p-4 text-left transition-colors', type === t ? 'border-primary bg-primary-soft' : 'hover:bg-muted')}
+                  className={cn(
+                    'rounded-lg border p-4 text-left transition-colors',
+                    type === t ? 'border-primary bg-primary-soft' : 'hover:bg-muted',
+                  )}
                 >
                   <p className="text-sm font-semibold">{TYPE_COPY[t].title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{TYPE_COPY[t].body}</p>
+                  <p className="text-muted-foreground mt-1 text-xs">{TYPE_COPY[t].body}</p>
                 </button>
               ))}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="First name" error={errors.firstName?.message}><Input {...register('firstName')} /></Field>
-              <Field label="Last name" error={errors.lastName?.message}><Input {...register('lastName')} /></Field>
-              <Field label="Phone" error={errors.phone?.message} hint="Used to sign in to the rider app."><Input type="tel" placeholder="0803 123 4567" {...register('phone')} /></Field>
+              <Field label="First name" error={errors.firstName?.message}>
+                <Input {...register('firstName')} />
+              </Field>
+              <Field label="Last name" error={errors.lastName?.message}>
+                <Input {...register('lastName')} />
+              </Field>
+              <Field
+                label="Phone"
+                error={errors.phone?.message}
+                hint="Used to sign in to the rider app."
+              >
+                <Input type="tel" placeholder="0803 123 4567" {...register('phone')} />
+              </Field>
               <Field label="Email (optional)" error={errors.email?.message}>
-                <Input type="email" {...register('email', { setValueAs: (v: string) => v || undefined })} />
+                <Input
+                  type="email"
+                  {...register('email', { setValueAs: (v: string) => v || undefined })}
+                />
               </Field>
               <Field label="Vehicle" error={errors.vehicleType?.message}>
-                <Select options={VEHICLE_TYPES.map((v) => ({ value: v, label: humanize(v) }))} {...register('vehicleType')} />
+                <Select
+                  options={VEHICLE_TYPES.map((v) => ({ value: v, label: humanize(v) }))}
+                  {...register('vehicleType')}
+                />
               </Field>
               <Field label="Plate number (optional)">
-                <Input {...register('plateNumber', { setValueAs: (v: string) => v || undefined })} />
+                <Input
+                  {...register('plateNumber', { setValueAs: (v: string) => v || undefined })}
+                />
               </Field>
               {type === 'partner' && (
                 <>
-                  <Field label="Fleet / company (optional)"><Input {...register('fleetName', { setValueAs: (v: string) => v || undefined })} /></Field>
-                  <Field label="Commission % (optional)" error={errors.commissionPct?.message} hint="Blank uses the platform default.">
-                    <Input type="number" min={0} max={100} step={0.5} {...register('commissionPct', { setValueAs: (v: string) => (v === '' ? undefined : Number(v)) })} />
+                  <Field label="Fleet / company (optional)">
+                    <Input
+                      {...register('fleetName', { setValueAs: (v: string) => v || undefined })}
+                    />
+                  </Field>
+                  <Field
+                    label="Commission % (optional)"
+                    error={errors.commissionPct?.message}
+                    hint="Blank uses the platform default."
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      {...register('commissionPct', {
+                        setValueAs: (v: string) => (v === '' ? undefined : Number(v)),
+                      })}
+                    />
                   </Field>
                 </>
               )}
             </div>
 
-            <Field label="Primary zone" error={errors.primaryZoneId?.message} hint="Riders get first priority for jobs in their primary zone.">
-              <Select placeholder="Select a zone" options={zoneOptions(zones.data)} {...register('primaryZoneId')} />
+            <Field
+              label="Primary zone"
+              error={errors.primaryZoneId?.message}
+              hint="Riders get first priority for jobs in their primary zone."
+            >
+              <Select
+                placeholder="Select a zone"
+                options={zoneOptions(zones.data)}
+                {...register('primaryZoneId')}
+              />
             </Field>
 
             <fieldset>
               <legend className="text-sm font-medium">Also covers</legend>
-              <p className="mb-2 text-xs text-muted-foreground">Second-priority zones for this rider.</p>
+              <p className="text-muted-foreground mb-2 text-xs">
+                Second-priority zones for this rider.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {zones.data?.filter((z) => z.id !== primaryZoneId).map((z) => {
-                  const on = coverage.includes(z.id);
-                  return (
-                    <button
-                      key={z.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setValue('coverageZoneIds', on ? coverage.filter((c) => c !== z.id) : [...coverage, z.id])}
-                      className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors', on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted')}
-                    >
-                      {z.name}
-                    </button>
-                  );
-                })}
+                {zones.data
+                  ?.filter((z) => z.id !== primaryZoneId)
+                  .map((z) => {
+                    const on = coverage.includes(z.id);
+                    return (
+                      <button
+                        key={z.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          setValue(
+                            'coverageZoneIds',
+                            on ? coverage.filter((c) => c !== z.id) : [...coverage, z.id],
+                          )
+                        }
+                        className={cn(
+                          'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                          on
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'hover:bg-muted',
+                        )}
+                      >
+                        {z.name}
+                      </button>
+                    );
+                  })}
               </div>
             </fieldset>
 
             <div className="flex justify-end gap-2 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => close(false)}>Cancel</Button>
-              <Button type="submit" loading={create.isPending}>Onboard rider</Button>
+              <Button type="button" variant="outline" onClick={() => close(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={create.isPending}>
+                Onboard rider
+              </Button>
             </div>
           </form>
         )}
@@ -133,30 +225,55 @@ export function OnboardRiderDialog({ open, onOpenChange }: { open: boolean; onOp
   );
 }
 
-function CreatedNotice({ name, phone, tempPassword, onDone }: { name: string; phone: string; tempPassword: string; onDone: () => void }) {
+export function CreatedNotice({
+  name,
+  phone,
+  tempPassword,
+  onDone,
+  intro,
+}: {
+  name: string;
+  phone: string;
+  tempPassword: string;
+  onDone: () => void;
+  intro?: ReactNode;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        <strong>{name}</strong> is onboarded in <strong>pending</strong> status. Share these sign-in details, then activate them from their profile once documents are verified.
+        {intro ?? (
+          <>
+            <strong>{name}</strong> is onboarded in <strong>pending</strong> status. Share these
+            sign-in details, then activate them from their profile once documents are verified.
+          </>
+        )}
       </p>
-      <div className="rounded-lg border bg-muted p-4 text-sm">
-        <p><span className="text-muted-foreground">Phone:</span> {phone}</p>
+      <div className="bg-muted rounded-lg border p-4 text-sm">
+        <p>
+          <span className="text-muted-foreground">Phone:</span> {phone}
+        </p>
         <p className="mt-1 flex items-center gap-2">
           <span className="text-muted-foreground">Temporary password:</span>
-          <code className="rounded bg-card px-2 py-0.5 font-mono font-semibold">{tempPassword}</code>
+          <code className="bg-card rounded px-2 py-0.5 font-mono font-semibold">
+            {tempPassword}
+          </code>
           <button
             type="button"
-            className="rounded p-1 hover:bg-card"
+            className="hover:bg-card rounded p-1"
             aria-label="Copy password"
             onClick={() => navigator.clipboard.writeText(tempPassword).then(() => setCopied(true))}
           >
-            {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
+            {copied ? <Check className="text-success size-4" /> : <Copy className="size-4" />}
           </button>
         </p>
       </div>
-      <p className="text-xs text-muted-foreground">This password is shown once and is not stored in readable form.</p>
-      <div className="flex justify-end"><Button onClick={onDone}>Done</Button></div>
+      <p className="text-muted-foreground text-xs">
+        This password is shown once and is not stored in readable form.
+      </p>
+      <div className="flex justify-end">
+        <Button onClick={onDone}>Done</Button>
+      </div>
     </div>
   );
 }

@@ -328,12 +328,12 @@ export default async function HomePage() {
               </li>
             ))}
             <li className="sm:col-span-2">
-              <a
-                href="mailto:riders@estene.ng?subject=Partner%20rider%20application"
+              <Link
+                href="/ride"
                 className="bg-accent text-accent-foreground hover:bg-accent-hover inline-flex items-center gap-2 rounded-lg px-5 py-3 font-semibold"
               >
                 Apply to ride <ArrowRight className="size-4" />
-              </a>
+              </Link>
             </li>
           </ul>
         </div>

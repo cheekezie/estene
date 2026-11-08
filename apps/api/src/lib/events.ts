@@ -38,6 +38,11 @@ export type DomainEvents = {
   /** A product's available stock fell to the client's threshold. Fires once per dip. */
   'stock.low': { clientId: string; productId: string; officeId: string };
   'dispatch.offered': { shipmentId: string; riderId: string; offerId: string; expiresAt: Date };
+  /** Someone applied to ride on the website. */
+  'rider_application.submitted': { applicationId: string };
+  /** Ops set (or moved) the applicant's vetting appointment. */
+  'rider_application.vetting_scheduled': { applicationId: string };
+  'rider_application.approved': { applicationId: string; riderId: string };
 };
 
 class TypedBus {

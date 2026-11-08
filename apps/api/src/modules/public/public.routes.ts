@@ -9,6 +9,8 @@ import { ShipmentModel } from '../shipments/models/shipment.model';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { ZonesService } from '../zones/zones.service';
 import { OfficesService } from '../offices/offices.service';
+import { RiderApplicationInputSchema } from '@estene/contracts/rider-application';
+import { RiderApplicationsService } from '../rider-applications/rider-applications.service';
 
 const TrackingParams = z.object({ trackingNumber: z.string().trim().min(6).max(20) });
 const RefParams = z.object({ reference: z.string().trim().min(6).max(40) });
@@ -35,6 +37,19 @@ export async function publicRoutes(app: FastifyInstance) {
 
   /** Offices for drop-off and collection. */
   app.get('/offices', async (_req, reply) => send(reply, await OfficesService.listPublic()));
+
+  /** "Apply to ride" on the website. Ops reviews it in the admin and invites the applicant for vetting. */
+  app.post(
+    '/rider-applications',
+    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
+    async (req, reply) =>
+      send(
+        reply,
+        await RiderApplicationsService.submit(parse(RiderApplicationInputSchema, req.body)),
+        201,
+        'Application received',
+      ),
+  );
 
   app.post(
     '/quote',

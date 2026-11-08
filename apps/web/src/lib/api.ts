@@ -7,6 +7,7 @@ import type {
 import type { QuoteLine } from '@estene/contracts/pricing';
 import type { PublicOfficeDto } from '@estene/contracts/office';
 import type { CheckoutSession, TransactionDto } from '@estene/contracts/payment';
+import type { RiderApplicationData } from '@estene/contracts/rider-application';
 
 /** Prepaid bookings come back with either a hosted checkout or an account number to pay into. */
 export type PaymentStart = { checkout?: CheckoutSession; transfer?: TransactionDto };
@@ -94,6 +95,11 @@ export const publicApi = {
     }>(`/public/payments/${encodeURIComponent(reference)}/verify`, {
       method: 'POST',
       cache: 'no-store',
+    }),
+  applyToRide: (body: RiderApplicationData) =>
+    request<{ reference: string }>('/public/rider-applications', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
   track: (tn: string) =>
     request<PublicTrackingDto>(`/public/track/${encodeURIComponent(tn)}`, { cache: 'no-store' }),

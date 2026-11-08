@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import mongoose from 'mongoose';
-import { env, isProd, useR2 } from './config/env';
+import { env, isProd } from './config/env';
 import { AppError } from './lib/errors';
 import { redis } from './lib/redis';
 import { authPlugin } from './plugins/auth';
@@ -18,12 +18,12 @@ import { officesRoutes } from './modules/offices/offices.routes';
 import { paymentsRoutes } from './modules/payments/payments.routes';
 import { payoutsRoutes } from './modules/payouts/payouts.routes';
 import { simulatorRoutes } from './modules/payments/simulator.routes';
-import { localUploadRoutes } from './modules/uploads/uploads.routes';
 import { gatewayWebhookRoutes } from './modules/payments/gateway-webhook.routes';
 import { portalRoutes } from './modules/portal/portal.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
 import { publicRoutes } from './modules/public/public.routes';
 import { riderAppRoutes } from './modules/rider-app/rider-app.routes';
+import { riderApplicationsRoutes } from './modules/rider-applications/rider-applications.routes';
 import { ridersRoutes } from './modules/riders/riders.routes';
 import { tagsRoutes } from './modules/tags/tags.routes';
 import { warehousingRoutes } from './modules/warehousing/warehousing.routes';
@@ -114,12 +114,12 @@ export async function buildApp() {
   await app.register(gatewayWebhookRoutes, { prefix: '/api/public' });
   if (env.PAYMENTS_PROVIDER === 'simulator')
     await app.register(simulatorRoutes, { prefix: '/api/public' });
-  if (!useR2) await app.register(localUploadRoutes, { prefix: '/api/uploads' });
   await app.register(riderAppRoutes, { prefix: '/api/rider' });
   await app.register(integrationRoutes, { prefix: '/api/v1' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
   await app.register(shipmentsRoutes, { prefix: '/api/shipments' });
   await app.register(ridersRoutes, { prefix: '/api/riders' });
+  await app.register(riderApplicationsRoutes, { prefix: '/api/rider-applications' });
   await app.register(zonesRoutes, { prefix: '/api/zones' });
   await app.register(pricingRoutes, { prefix: '/api/pricing' });
   await app.register(tagsRoutes, { prefix: '/api/tags' });

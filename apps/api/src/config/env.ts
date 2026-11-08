@@ -22,8 +22,6 @@ const envSchema = z.object({
   SEED_ADMIN_PASSWORD: z.string().optional(),
   /** Public website — used for tracking links in SMS and integration payloads. */
   PUBLIC_SITE_URL: z.string().default('http://localhost:3100'),
-  /** Public API origin — used to build links the browser follows (simulator pages). */
-  API_PUBLIC_URL: z.string().default('http://localhost:4000'),
 
   // ── Payments ────────────────────────────────────────────────────────────
   /** One gateway for money in (customer payments) and money out (rider payouts). `simulator` for local work. */
@@ -46,7 +44,10 @@ const envSchema = z.object({
   // ── File storage: Cloudflare R2 (delivery photos) ────────────────────
   /** Cloudflare dashboard → R2 → the account ID shown on the overview page. */
   R2_ACCOUNT_ID: z.string().trim().optional(),
+  /** Public bucket (custom domain attached) for delivery photos. */
   R2_BUCKET: z.string().trim().optional(),
+  /** Private bucket — no public access — for rider vetting documents (IDs, licences). */
+  R2_DOCUMENTS_BUCKET: z.string().trim().optional(),
   /** R2 → Manage API tokens → "Object Read & Write" on the bucket. */
   R2_ACCESS_KEY_ID: z.string().trim().optional(),
   R2_SECRET_ACCESS_KEY: z.string().trim().optional(),
@@ -74,6 +75,8 @@ const parsed = envSchema
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: 'custom', path: [path], message });
     if (e.NODE_ENV === 'production') {
+      if (!e.R2_DOCUMENTS_BUCKET)
+        issue('R2_DOCUMENTS_BUCKET', 'Set R2_DOCUMENTS_BUCKET — rider documents are stored there');
       if (e.PAYMENTS_PROVIDER === 'simulator')
         issue('PAYMENTS_PROVIDER', 'The payment simulator cannot run in production');
       if (e.PAYMENTS_PROVIDER === 'sayswitch' && e.SAYSWITCH_SECRET_KEY?.startsWith('sk_test_'))
@@ -99,5 +102,3 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === 'production';
-/** Photos go to Cloudflare R2. Without R2 settings (development only) they're kept on disk under apps/api/.uploads. */
-export const useR2 = Boolean(env.R2_ACCOUNT_ID);
