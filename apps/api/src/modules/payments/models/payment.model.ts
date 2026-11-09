@@ -19,8 +19,10 @@ import {
 export interface IPayment {
   _id: Types.ObjectId;
   reference: string;
-  shipment: Types.ObjectId;
+  /** Set for shipment payments; absent when a client pays a handling fee. */
+  shipment?: Types.ObjectId | null;
   client?: Types.ObjectId | null;
+  handlingFee?: Types.ObjectId | null;
   purpose: PaymentPurpose;
   channel: PaymentChannel;
   method: PaymentMethod;
@@ -51,8 +53,9 @@ export interface IPayment {
 const paymentSchema = new Schema<IPayment>(
   {
     reference: { type: String, required: true, unique: true },
-    shipment: { type: Schema.Types.ObjectId, ref: 'Shipment', required: true, index: true },
+    shipment: { type: Schema.Types.ObjectId, ref: 'Shipment', index: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client', default: null },
+    handlingFee: { type: Schema.Types.ObjectId, ref: 'HandlingFee', index: { sparse: true } },
     purpose: { type: String, enum: PAYMENT_PURPOSES, required: true },
     channel: { type: String, enum: PAYMENT_CHANNELS, required: true },
     method: { type: String, enum: PAYMENT_METHODS, required: true },

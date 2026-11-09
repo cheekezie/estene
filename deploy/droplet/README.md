@@ -64,6 +64,7 @@ JWT_SECRET=<openssl rand -hex 32>
 ENCRYPTION_KEY=<openssl rand -hex 32>
 CORS_ORIGINS=https://admin.estene.ng,https://portal.estene.ng,https://estene.ng
 PUBLIC_SITE_URL=https://estene.ng
+PORTAL_URL=https://portal.estene.ng
 PAYMENTS_PROVIDER=saukipay
 SAUKIPAY_SECRET_KEY=...
 R2_ACCOUNT_ID=...

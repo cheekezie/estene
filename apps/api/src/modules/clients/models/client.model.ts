@@ -27,6 +27,15 @@ export interface IApiKey {
   revokedAt?: Date;
 }
 
+export interface IFreePeriod {
+  _id: Types.ObjectId;
+  fromCycle: number;
+  toCycle: number;
+  reason: string;
+  createdBy?: Types.ObjectId;
+  createdAt: Date;
+}
+
 export interface IClient {
   _id: Types.ObjectId;
   name: string;
@@ -50,15 +59,17 @@ export interface IClient {
   status: ClientStatus;
   apiKeys: Types.DocumentArray<IApiKey>;
   webhook?: { url: string; events: WebhookEvent[]; isActive: boolean; secretCipher: string };
-  /** Store-and-ship: we hold the client's stock at `office` and bill a flat monthly fee. */
+  /** Store-and-ship: we hold the client's stock at `office` and bill a handling fee per cycle. */
   warehousing?: {
     enabled: boolean;
     office: Types.ObjectId;
-    monthlyFee: number;
     lowStockThreshold: number;
     enabledAt?: Date;
-    /** Set when switched off, so the last part-month is still billed. */
     disabledAt?: Date;
+    /** First activation. Handling-fee cycles run monthly from here and never move. */
+    billingAnchor?: Date;
+    /** Cycles ops made free in advance (1 = first cycle), inclusive. */
+    freePeriods: Types.DocumentArray<IFreePeriod>;
   };
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -122,10 +133,22 @@ const clientSchema = new Schema<IClient>(
         {
           enabled: { type: Boolean, default: false },
           office: { type: Schema.Types.ObjectId, ref: 'Office', required: true },
-          monthlyFee: { type: Number, default: 0, min: 0, validate: Number.isInteger },
           lowStockThreshold: { type: Number, default: 5 },
           enabledAt: Date,
           disabledAt: Date,
+          billingAnchor: Date,
+          freePeriods: {
+            type: [
+              new Schema<IFreePeriod>({
+                fromCycle: { type: Number, required: true, min: 1 },
+                toCycle: { type: Number, required: true, min: 1 },
+                reason: { type: String, required: true },
+                createdBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
+                createdAt: { type: Date, default: Date.now },
+              }),
+            ],
+            default: [],
+          },
         },
         { _id: false },
       ),

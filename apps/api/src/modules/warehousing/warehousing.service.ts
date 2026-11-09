@@ -120,7 +120,6 @@ export const WarehousingService = {
     return {
       enabled: w.enabled,
       office: { id: office._id.toString(), name: office.name, code: office.code },
-      monthlyFee: w.monthlyFee,
       lowStockThreshold: w.lowStockThreshold,
       enabledAt: w.enabledAt?.toISOString() ?? null,
     };
@@ -156,14 +155,16 @@ export const WarehousingService = {
         );
     }
     const now = new Date();
-    client.warehousing = {
+    client.set('warehousing', {
       enabled: input.enabled,
       office: new Types.ObjectId(input.officeId),
-      monthlyFee: input.monthlyFee,
       lowStockThreshold: input.lowStockThreshold,
       enabledAt: input.enabled ? (prev?.enabled ? prev.enabledAt : now) : prev?.enabledAt,
       disabledAt: input.enabled ? undefined : prev?.enabled ? now : prev?.disabledAt,
-    };
+      // Handling-fee cycles count from the first activation, even after switching off and on.
+      billingAnchor: prev?.billingAnchor ?? prev?.enabledAt ?? (input.enabled ? now : undefined),
+      freePeriods: prev?.freePeriods ?? [],
+    });
     await client.save();
     // Orders still waiting for stock now wait at the new warehouse.
     if (prev && prev.office.toString() !== input.officeId)

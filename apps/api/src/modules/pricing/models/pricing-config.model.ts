@@ -1,11 +1,12 @@
 import { Schema, model } from 'mongoose';
+import { DEFAULT_HANDLING_FEE, type HandlingFeeSettings } from '@estene/contracts/handling-fee';
 import type { PricingConfig } from '@estene/contracts/pricing';
 
 /**
  * Singleton (key = "default"). Every save bumps `version`; shipments store the
  * version they were priced with, so old quotes stay explainable after edits.
  */
-export interface IPricingConfig extends PricingConfig {
+export interface IPricingConfig extends PricingConfig, HandlingFeeSettings {
   key: string;
   version: number;
   /** Platform default commission on partner rider trips, percent. */
@@ -32,6 +33,10 @@ const pricingConfigSchema = new Schema<IPricingConfig>(
     roundToNaira: { type: Number, required: true },
     partnerCommissionPct: { type: Number, default: 20 },
     maxActiveJobsPerRider: { type: Number, default: 3 },
+    // Warehousing handling fee: price per block of units, per billing cycle.
+    handlingUnitsPerBlock: { type: Number, default: DEFAULT_HANDLING_FEE.handlingUnitsPerBlock },
+    handlingFeePerBlock: { type: Number, default: DEFAULT_HANDLING_FEE.handlingFeePerBlock },
+    handlingFeeDueDays: { type: Number, default: DEFAULT_HANDLING_FEE.handlingFeeDueDays },
     updatedBy: String,
   },
   { timestamps: true },

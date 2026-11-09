@@ -54,6 +54,8 @@ export const templates = {
   balanceDueOnline: (tn: string, amount: number) =>
     `Estene: ${tn} costs ${formatNaira(amount)} more after the rider checked it. Pay by card, transfer or USSD at ${TRACK_URL}/${tn} before delivery.`,
 
+  handlingFeeDue: (period: string, units: number, amount: number, dueBy: string) =>
+    `Estene: your warehouse handling fee for ${period} is ${formatNaira(amount)} (${units} units). Please pay by ${dueBy} in your Estene client portal.`,
   lowStock: (name: string, sku: string, available: number, warehouse: string) =>
     `Estene: ${name} (${sku}) is running low at ${warehouse} — ${available} left to sell. Send more stock to keep orders moving.`,
 };

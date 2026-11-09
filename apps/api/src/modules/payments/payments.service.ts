@@ -161,8 +161,12 @@ async function markSuccess(
     { new: true },
   );
   if (!payment) return null;
-  await syncShipment(payment.shipment);
-  bus.emit('payment.succeeded', { paymentId: payment.id, shipmentId: payment.shipment.toString() });
+  if (payment.shipment) await syncShipment(payment.shipment);
+  bus.emit('payment.succeeded', {
+    paymentId: payment.id,
+    shipmentId: payment.shipment?.toString(),
+    handlingFeeId: payment.handlingFee?.toString(),
+  });
   return payment;
 }
 
@@ -182,8 +186,112 @@ async function createPayment(
   });
 }
 
+/** What a business client pays for that isn't a shipment (a handling-fee cycle). */
+export type ClientCharge = {
+  clientId: string;
+  handlingFeeId: string;
+  amount: number;
+  customer: { name: string; phone: string; email: string };
+};
+
 export const PaymentsService = {
   outstanding,
+
+  /**
+   * Hosted checkout for a client charge. Reuses a live checkout for the same
+   * charge, so clicking "Pay" twice can't open two payments.
+   */
+  async startClientCheckout(charge: ClientCharge, returnPath: string): Promise<CheckoutSession> {
+    const live = await PaymentModel.findOne({
+      handlingFee: charge.handlingFeeId,
+      channel: 'checkout',
+      status: 'pending',
+      amount: charge.amount,
+      provider: gateway.name,
+      checkoutUrl: { $exists: true },
+      expiresAt: { $gt: new Date(Date.now() + 5 * 60_000) },
+    });
+    if (live)
+      return {
+        reference: live.reference,
+        amount: live.amount,
+        provider: gateway.name,
+        checkoutUrl: live.checkoutUrl!,
+      };
+    const payment = await PaymentModel.create({
+      reference: newReference(),
+      client: charge.clientId,
+      handlingFee: charge.handlingFeeId,
+      purpose: 'handling_fee',
+      channel: 'checkout',
+      method: 'online',
+      provider: gateway.name,
+      amount: charge.amount,
+      customer: charge.customer,
+      events: [{ type: 'created', at: new Date() }],
+      expiresAt: new Date(Date.now() + CHECKOUT_TTL_MS),
+    });
+    const sep = returnPath.includes('?') ? '&' : '?';
+    const session = await gateway.checkoutSession({
+      reference: payment.reference,
+      amount: charge.amount,
+      customer: charge.customer,
+      returnUrl: `${env.PORTAL_URL}${returnPath}${sep}ref=${payment.reference}`,
+    });
+    payment.checkoutUrl = session.checkoutUrl;
+    if (session.providerReference) payment.providerReference = session.providerReference;
+    await payment.save();
+    return {
+      reference: session.reference,
+      amount: session.amount,
+      provider: session.provider,
+      checkoutUrl: session.checkoutUrl,
+    };
+  },
+
+  /** Staff confirm a client charge paid outside the gateway (a transfer to our account). */
+  async recordClientManual(
+    charge: Omit<ClientCharge, 'customer'> & { customer: ClientCharge['customer'] },
+    adminId: string,
+    input: { note?: string; reference?: string },
+  ) {
+    const payment = await PaymentModel.create({
+      reference: newReference(),
+      client: charge.clientId,
+      handlingFee: charge.handlingFeeId,
+      purpose: 'handling_fee',
+      channel: 'manual',
+      method: 'transfer',
+      provider: 'offline',
+      amount: charge.amount,
+      customer: charge.customer,
+      recordedBy: new Types.ObjectId(adminId),
+      note: input.note,
+      providerReference: input.reference,
+      events: [{ type: 'created', at: new Date() }],
+    });
+    await markSuccess(payment._id, { note: input.note ?? 'Recorded by staff' });
+    return payment;
+  },
+
+  /** The client's own payment, re-checked with the gateway (after the checkout redirect). */
+  async verifyForClient(clientId: string, reference: string) {
+    const payment = await PaymentModel.findOne({ reference, client: clientId }, '_id').lean();
+    if (!payment) throw notFound('Payment not found');
+    const p = await this.verify(reference);
+    return { reference, status: p?.status ?? 'pending' };
+  },
+
+  /** A charge was settled: withdraw its other open checkouts so the client can't pay twice. */
+  async withdrawOpenForFee(handlingFeeId: string) {
+    await PaymentModel.updateMany(
+      { handlingFee: handlingFeeId, status: 'pending' },
+      {
+        status: 'expired',
+        $push: { events: { type: 'withdrawn', at: new Date(), note: 'Fee already settled' } },
+      },
+    );
+  },
 
   /** Hosted checkout for whatever is still owed (the booking, or a top-up after re-pricing). */
   async startCheckout(shipmentId: string, purpose?: PaymentPurpose): Promise<CheckoutSession> {

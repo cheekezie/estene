@@ -46,6 +46,9 @@ type FormValues = {
   roundToNaira: string;
   partnerCommissionPct: string;
   maxActiveJobsPerRider: string;
+  handlingUnitsPerBlock: string;
+  handlingFeePerBlock: string;
+  handlingFeeDueDays: string;
 };
 
 const mapRecord = <K extends string, A, B>(r: Record<K, A>, fn: (v: A) => B) =>
@@ -64,6 +67,9 @@ const toForm = (s: PlatformSettings): FormValues => ({
   roundToNaira: String(s.roundToNaira),
   partnerCommissionPct: String(s.partnerCommissionPct),
   maxActiveJobsPerRider: String(s.maxActiveJobsPerRider),
+  handlingUnitsPerBlock: String(s.handlingUnitsPerBlock),
+  handlingFeePerBlock: String(koboToNaira(s.handlingFeePerBlock)),
+  handlingFeeDueDays: String(s.handlingFeeDueDays),
 });
 
 const fromForm = (f: FormValues): Omit<PlatformSettings, 'version'> => ({
@@ -79,6 +85,9 @@ const fromForm = (f: FormValues): Omit<PlatformSettings, 'version'> => ({
   roundToNaira: Number(f.roundToNaira),
   partnerCommissionPct: Number(f.partnerCommissionPct),
   maxActiveJobsPerRider: Number(f.maxActiveJobsPerRider),
+  handlingUnitsPerBlock: Number(f.handlingUnitsPerBlock),
+  handlingFeePerBlock: nairaToKobo(Number(f.handlingFeePerBlock)),
+  handlingFeeDueDays: Number(f.handlingFeeDueDays),
 });
 
 export default function PricingPage() {
@@ -209,6 +218,29 @@ function PricingForm({ settings }: { settings: PlatformSettings }) {
               >
                 {money('maxActiveJobsPerRider')}
               </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Warehouse handling fee</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground text-sm">
+                Billed per client every month from the day warehousing was switched on. A month’s
+                units are what was on the shelves at its start plus everything added during it; part
+                blocks round up and a month with no stock is free.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Fee per block (₦)">{money('handlingFeePerBlock')}</Field>
+                <Field label="Units per block">{money('handlingUnitsPerBlock')}</Field>
+                <Field label="Due after (days)" hint="After the month closes.">
+                  {money('handlingFeeDueDays')}
+                </Field>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Changes apply to months billed from now on. Months already billed keep their price.
+              </p>
             </CardContent>
           </Card>
         </div>

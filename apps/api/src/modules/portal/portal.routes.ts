@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { PaginationQuerySchema } from '@estene/contracts/common';
+import { ObjectIdSchema, PaginationQuerySchema } from '@estene/contracts/common';
 import { PortalChangePasswordSchema, PortalShipmentQuerySchema } from '@estene/contracts/portal';
 import {
   INBOUND_STATUSES,
@@ -12,12 +12,15 @@ import {
 } from '@estene/contracts/warehouse';
 import { parse, send } from '../../lib/response';
 import { requireActor } from '../../plugins/auth';
+import { HandlingFeesService } from '../handling-fees/handling-fees.service';
+import { PaymentsService } from '../payments/payments.service';
 import { OrdersService } from '../warehousing/orders.service';
 import { toInboundDto, toOrderDto } from '../warehousing/warehousing.mapper';
 import { warehousingClient, WarehousingService } from '../warehousing/warehousing.service';
 import { PortalService } from './portal.service';
 
 const Ref = z.object({ ref: z.string().trim().min(1).max(64) });
+const IdParam = z.object({ id: ObjectIdSchema });
 const ReasonBody = z.object({ reason: z.string().trim().max(300).optional() });
 
 /**
@@ -75,6 +78,19 @@ export async function portalRoutes(app: FastifyInstance) {
       reply,
       await PortalService.statement(clientOf(req), parse(PaginationQuerySchema, req.query)),
     ),
+  );
+
+  // ── Warehouse handling fee ──
+  // Not behind whClient: a client switched off may still owe for past cycles.
+  app.get('/handling-fees', async (req, reply) =>
+    send(reply, await HandlingFeesService.view(clientOf(req))),
+  );
+  app.post('/handling-fees/:id/pay', async (req, reply) =>
+    send(reply, await HandlingFeesService.pay(clientOf(req), parse(IdParam, req.params).id)),
+  );
+  /** After the checkout redirect: confirm with the gateway (scoped to this client's payments). */
+  app.post('/payments/:ref/verify', async (req, reply) =>
+    send(reply, await PaymentsService.verifyForClient(clientOf(req), parse(Ref, req.params).ref)),
   );
 
   // ── Products ──

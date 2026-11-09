@@ -3,7 +3,11 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Receipt } from 'lucide-react';
 import type { Paginated } from '@estene/contracts/common';
 import { formatNaira } from '@estene/contracts/money';
-import { STATEMENT_ENTRY_LABELS, type StatementEntryDto } from '@estene/contracts/portal';
+import {
+  STATEMENT_CREDIT_TYPES,
+  STATEMENT_ENTRY_LABELS,
+  type StatementEntryDto,
+} from '@estene/contracts/portal';
 import { formatDate } from '@estene/lib/date';
 import { cn } from '@estene/lib/utils';
 import { Card } from '@estene/ui/card';
@@ -38,7 +42,8 @@ export default function StatementPage() {
                 {formatNaira(q.data.outstanding)}
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
-                Pay by bank transfer to the account on your invoice, quoting your business name.
+                Pay warehouse handling fees online under Handling fees. For delivery charges, pay by
+                bank transfer to the account on your invoice, quoting your business name.
               </p>
             </Card>
             <Card>
@@ -53,12 +58,12 @@ export default function StatementPage() {
                         <TH>Item</TH>
                         <TH>Reference</TH>
                         <TH className="text-right">Charge</TH>
-                        <TH className="text-right">Paid</TH>
+                        <TH className="text-right">Paid / waived</TH>
                       </TR>
                     </THead>
                     <TBody>
                       {q.data.entries.items.map((e) => {
-                        const paid = e.type === 'payment_received';
+                        const paid = STATEMENT_CREDIT_TYPES.includes(e.type);
                         return (
                           <TR key={e.id}>
                             <TD className="text-muted-foreground whitespace-nowrap text-sm">

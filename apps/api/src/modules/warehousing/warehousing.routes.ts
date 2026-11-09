@@ -23,7 +23,6 @@ import { badRequest, notFound } from '../../lib/errors';
 import { parse, send } from '../../lib/response';
 import { requireActor, requireRole } from '../../plugins/auth';
 import { assertOfficeAccess } from '../office-ops/office-ops.service';
-import { WarehousingBillingService } from './billing.service';
 import { ProductModel } from './models/product.model';
 import { OrdersService } from './orders.service';
 import { StockService } from './stock.service';
@@ -232,18 +231,4 @@ export async function warehousingRoutes(app: FastifyInstance) {
       'Return processed',
     ),
   );
-
-  // ── Billing ──
-  app.post('/billing/storage-fees', { preHandler: requireRole('finance') }, async (req, reply) => {
-    const { month } = parse(
-      z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM') }),
-      req.body,
-    );
-    return send(
-      reply,
-      await WarehousingBillingService.postStorageFees(month),
-      200,
-      'Storage fees posted',
-    );
-  });
 }

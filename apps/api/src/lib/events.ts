@@ -22,8 +22,12 @@ export type DomainEvents = {
     actorId: string;
   };
   'shipment.price_adjusted': { shipmentId: string; from: number; to: number; reason?: string };
-  /** Money in: a payment row just became successful. */
-  'payment.succeeded': { paymentId: string; shipmentId: string };
+  /** Money in: a payment row just became successful. One of the two targets is set. */
+  'payment.succeeded': { paymentId: string; shipmentId?: string; handlingFeeId?: string };
+  /** A handling-fee cycle closed and was billed (including free and no-stock cycles). */
+  'handling_fee.billed': { feeId: string };
+  /** Ops waived a billed handling fee. */
+  'handling_fee.waived': { feeId: string; adminId: string };
   /** A prepaid shipment was re-priced upward and an account number was issued for the difference. */
   'payment.balance_requested': { paymentId: string; shipmentId: string };
   /** Staff booked a prepaid shipment by phone — the sender needs payment details by SMS. */

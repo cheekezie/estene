@@ -19,6 +19,7 @@ import { paymentsRoutes } from './modules/payments/payments.routes';
 import { payoutsRoutes } from './modules/payouts/payouts.routes';
 import { simulatorRoutes } from './modules/payments/simulator.routes';
 import { gatewayWebhookRoutes } from './modules/payments/gateway-webhook.routes';
+import { handlingFeesRoutes } from './modules/handling-fees/handling-fees.routes';
 import { portalRoutes } from './modules/portal/portal.routes';
 import { pricingRoutes } from './modules/pricing/pricing.routes';
 import { publicRoutes } from './modules/public/public.routes';
@@ -133,6 +134,7 @@ export async function buildApp() {
   await app.register(payoutsRoutes, { prefix: '/api/payouts' });
   await app.register(warehousingRoutes, { prefix: '/api/warehousing' });
   await app.register(portalRoutes, { prefix: '/api/portal' });
+  await app.register(handlingFeesRoutes, { prefix: '/api/handling-fees' });
 
   return app;
 }

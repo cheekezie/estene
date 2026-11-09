@@ -14,7 +14,8 @@ export const PAYMENT_CHANNEL_LABELS: Record<PaymentChannel, string> = {
 };
 
 /** booking = the price at checkout; balance = the extra owed after the rider re-priced at pickup. */
-export const PAYMENT_PURPOSES = ['booking', 'balance'] as const;
+/** `handling_fee`: a warehousing client paying a billing cycle, not tied to a shipment. */
+export const PAYMENT_PURPOSES = ['booking', 'balance', 'handling_fee'] as const;
 export type PaymentPurpose = (typeof PAYMENT_PURPOSES)[number];
 
 export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'expired'] as const;

@@ -18,6 +18,7 @@ import { badRequest, conflict, notFound, unauthorized } from '../../lib/errors';
 import { paginate } from '../../lib/response';
 import { SessionModel } from '../auth/models/session.model';
 import { ClientModel } from '../clients/models/client.model';
+import { HandlingFeesService } from '../handling-fees/handling-fees.service';
 import { FinanceService } from '../finance/finance.service';
 import { LedgerEntryModel } from '../finance/models/ledger-entry.model';
 import { toIntegrationShipmentDto } from '../integration/integration.mapper';
@@ -148,11 +149,15 @@ export const PortalService = {
   // ── Portal views ──────────────────────────────────────────────────────────
 
   async overview(clientId: string): Promise<PortalOverviewDto> {
-    const client = await ClientModel.findById(clientId, 'warehousing.enabled').lean();
+    const client = await ClientModel.findById(
+      clientId,
+      'warehousing.enabled warehousing.enabledAt warehousing.billingAnchor',
+    ).lean();
+    const billed = !!(client?.warehousing?.billingAnchor ?? client?.warehousing?.enabledAt);
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
-    const [warehouse, active, deliveredThisMonth, outstanding] = await Promise.all([
+    const [warehouse, active, deliveredThisMonth, outstanding, handlingFee] = await Promise.all([
       client?.warehousing?.enabled ? WarehousingService.summary(clientId) : null,
       ShipmentModel.countDocuments({ client: clientId, status: { $nin: FINISHED } }),
       ShipmentModel.countDocuments({
@@ -161,8 +166,9 @@ export const PortalService = {
         updatedAt: { $gte: monthStart },
       }),
       FinanceService.clientOutstanding(clientId),
+      billed ? HandlingFeesService.summary(clientId) : null,
     ]);
-    return { warehouse, shipments: { active, deliveredThisMonth }, outstanding };
+    return { warehouse, shipments: { active, deliveredThisMonth }, outstanding, handlingFee };
   },
 
   /** The client's shipments in the integration shape: no PINs, no rider phone numbers. */

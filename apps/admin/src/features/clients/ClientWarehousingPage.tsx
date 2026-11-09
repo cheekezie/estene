@@ -45,7 +45,7 @@ import {
 } from '../warehouse/warehouse.queries';
 import { useClientContext } from './ClientLayout';
 
-/** /clients/:id/warehousing — switch store-and-ship on, set the fee, manage the catalogue. */
+/** /clients/:id/warehousing — switch store-and-ship on, choose the warehouse, manage the catalogue. */
 export default function ClientWarehousingPage() {
   const { client, canManage } = useClientContext();
   const settings = useWarehousingSettings(client.id);
@@ -90,8 +90,13 @@ export default function ClientWarehousingPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Monthly fee</p>
-                  <p className="font-medium">{formatNaira(settings.data.monthlyFee)}</p>
+                  <p className="text-muted-foreground">Handling fee</p>
+                  <Link
+                    to={`/clients/${client.id}/handling-fees`}
+                    className="text-primary font-medium hover:underline"
+                  >
+                    Per unit, monthly
+                  </Link>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Low stock at</p>
@@ -181,7 +186,6 @@ function SettingsForm({
   const warehouses = (offices.data ?? []).filter((o) => o.isActive && o.isWarehouse);
   const [enabled, setEnabled] = useState(current?.enabled ?? true);
   const [officeId, setOfficeId] = useState(current?.office.id ?? '');
-  const [fee, setFee] = useState(current ? String(koboToNaira(current.monthlyFee)) : '');
   const [threshold, setThreshold] = useState(String(current?.lowStockThreshold ?? 5));
 
   return (
@@ -195,7 +199,6 @@ function SettingsForm({
             {
               enabled,
               officeId,
-              monthlyFee: nairaToKobo(Number(fee) || 0),
               lowStockThreshold: Math.max(0, Number(threshold) || 0),
             },
             {
@@ -224,18 +227,6 @@ function SettingsForm({
             }))}
             value={officeId}
             onChange={(e) => setOfficeId(e.target.value)}
-          />
-        </Field>
-        <Field
-          label="Monthly fee (₦)"
-          hint="Billed on account on the 1st for the month just ended."
-        >
-          <Input
-            type="number"
-            min={0}
-            step="500"
-            value={fee}
-            onChange={(e) => setFee(e.target.value)}
           />
         </Field>
         <Field label="Low stock alert at" hint="Units available or fewer.">

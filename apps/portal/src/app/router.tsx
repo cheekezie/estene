@@ -26,6 +26,8 @@ const router = createBrowserRouter([
             ...page(() => import('@/features/deliveries/DeliveryDetailPage')),
           },
           { path: 'statement', ...page(() => import('@/features/statement/StatementPage')) },
+          // Outside RequireWarehousing: a client switched off may still owe for past months.
+          { path: 'billing', ...page(() => import('@/features/billing/BillingPage')) },
           { path: 'account', ...page(() => import('@/features/auth/AccountPage')) },
           {
             element: <RequireWarehousing />,

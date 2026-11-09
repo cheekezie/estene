@@ -340,9 +340,9 @@ async function seed() {
         warehousing: {
           enabled: true,
           office: officeIds['ABJ-WSE'],
-          monthlyFee: 2_500_000,
           lowStockThreshold: 5,
           enabledAt: new Date(),
+          billingAnchor: new Date(),
         },
       },
     },

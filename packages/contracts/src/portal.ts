@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { PaginationQuerySchema } from './common';
 import { SHIPMENT_STATUSES } from './enums';
+import type { HandlingFeeEstimateDto } from './handling-fee';
 import type { WarehouseSummaryDto } from './warehouse';
 
 /**
@@ -62,8 +63,15 @@ export type PortalOverviewDto = {
   /** Null when warehousing is off for this client. */
   warehouse: WarehouseSummaryDto | null;
   shipments: { active: number; deliveredThisMonth: number };
-  /** On-account charges and storage fees not yet paid, kobo. */
+  /** On-account charges and fees not yet paid, kobo. */
   outstanding: number;
+  /** Warehousing clients only. */
+  handlingFee: {
+    current: HandlingFeeEstimateDto | null;
+    totalDue: number;
+    nextDueAt: string | null;
+    overdue: boolean;
+  } | null;
 };
 
 export const PortalShipmentQuerySchema = PaginationQuerySchema.extend({
@@ -73,13 +81,22 @@ export const PortalShipmentQuerySchema = PaginationQuerySchema.extend({
 export const STATEMENT_ENTRY_TYPES = [
   'shipment_charge',
   'storage_fee',
+  'handling_fee',
+  'fee_waived',
   'payment_received',
 ] as const;
+/** Entries that reduce what the client owes. */
+export const STATEMENT_CREDIT_TYPES: readonly StatementEntryType[] = [
+  'payment_received',
+  'fee_waived',
+];
 export type StatementEntryType = (typeof STATEMENT_ENTRY_TYPES)[number];
 
 export const STATEMENT_ENTRY_LABELS: Record<StatementEntryType, string> = {
   shipment_charge: 'Delivery charge',
   storage_fee: 'Warehousing fee',
+  handling_fee: 'Handling fee',
+  fee_waived: 'Handling fee waived',
   payment_received: 'Payment received',
 };
 

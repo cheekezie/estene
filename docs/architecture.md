@@ -166,8 +166,9 @@ history, which works like the ledger and uses idempotency keys.
 - **Returns** must be processed by staff: each unit goes back on the shelf (`restocked`) or is
   written off. A packed order still at the warehouse with no rider can be cancelled, which
   unpacks it: the shipment is cancelled and the stock restocked.
-- **Billing:** a flat `warehousing.monthlyFee` is posted as `storage_fee` on the 1st (BullMQ job
-  scheduler, Lagos time) for the month just ended. It is keyed `storage:<client>:<YYYY-MM>`.
+- **Billing:** a handling fee per unit held, billed in monthly cycles. See
+  [Handling fees](#handling-fees-moduleshandling-fees) below. (The old flat `monthlyFee` is gone; past
+  `storage_fee` entries stay on statements.)
 
 - **Transfers** move a client's units between warehouses. Available units leave the
   origin at once (`transferred_out`) and travel as an inbound at the destination with
@@ -182,6 +183,45 @@ history, which works like the ledger and uses idempotency keys.
 - **Printing:** the admin's `/warehouse/orders/:id/print` renders the pick list (sorted by
   bin) and the packing slip.
 
+### Handling fees (`modules/handling-fees`)
+
+Warehousing clients pay a handling fee for the goods we keep.
+
+- **Cycles** run monthly from `warehousing.billingAnchor`, the first time warehousing was switched
+  on. It never moves, even if warehousing is switched off and on again. Cycles start at Lagos
+  midnight. An anchor on the 29th–31st falls back to the last day of shorter months
+  (`cycles.ts`).
+- **Units** for a cycle come from the append-only `StockMovement` history (`cycleUnits`):
+  - the units on the shelves when the cycle starts (all movements before it), plus
+  - every unit added during it (`received`, `restocked`, positive `adjusted`).
+
+  Units shipped mid-cycle still count. Transfers between the client's warehouses are ignored on
+  both sides, so units in transit are never dropped or counted twice.
+
+- **Price** is `ceil(units / handlingUnitsPerBlock) × handlingFeePerBlock`. The defaults are 20
+  units and ₦5,000, both editable on the Pricing page. The settings in force when a cycle is
+  billed are frozen on its `HandlingFee` row. A cycle with no units is `no_stock` at ₦0.
+- **Billing:** a BullMQ job runs daily at 01:00 Lagos and bills every closed cycle; opening the
+  fees in the admin or portal also bills on the spot. Each cycle is one `HandlingFee` row,
+  unique per client and period start, so re-runs are safe. It emits `handling_fee.billed`, which:
+  - posts a `handling_fee` ledger entry, keyed `handling:<feeId>`, and
+  - SMSes the client what's due and by when (`handlingFeeDueDays` after the cycle ends).
+- **Free months:** ops add `warehousing.freePeriods` (cycle numbers, set in advance) for things
+  like a first month free. Those cycles bill as `free` at ₦0. A cycle that's already billed
+  can't be made free.
+- **Waiving:** waiving a `due` cycle sets it to `waived` and posts a matching `fee_waived`
+  credit. The ledger keeps both entries.
+- **Paying:** the portal's Pay button opens the gateway checkout for that cycle. That payment
+  has `purpose: handling_fee` and `handlingFee` set, and no shipment. Opening checkout twice
+  reuses the live one. The checkout returns to `PORTAL_URL/billing?ref=…`, which verifies the
+  payment for that client only. Finance can also record a payment that arrived by transfer.
+  When the payment succeeds:
+  - `payment.succeeded` (now carrying `handlingFeeId`) marks the cycle `paid`;
+  - the payment posts `payment_received` as usual;
+  - other open checkouts for that cycle are withdrawn.
+
+Client outstanding = `shipment_charge + storage_fee + handling_fee − fee_waived − payment_received`.
+
 ### Client portal (`modules/portal`, `apps/portal`)
 
 People at a business client sign in at the portal (port 5500) with a `ClientUser` account.
@@ -192,8 +232,13 @@ re-checks that the user and the business are still active, so switching someone 
 effect at once. The portal's refresh cookie (`estene_crt`, path `/api/auth/client`) is
 separate from the staff cookie: browsers share cookies across ports on one host.
 
-The portal shows deliveries (in the integration shape, with no PINs), the statement and,
-for warehousing clients, stock, products, orders and inbounds.
+The portal shows:
+
+- deliveries, in the integration shape with no PINs;
+- the statement;
+- the handling fee: what's due, a Pay button and the running month's estimate, on the overview
+  and at `/billing`;
+- for warehousing clients, stock, products, orders and inbounds.
 
 ### Payment gateways (`modules/payments/providers`)
 

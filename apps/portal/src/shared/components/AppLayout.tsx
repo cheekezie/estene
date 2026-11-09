@@ -12,6 +12,7 @@ import {
   PackagePlus,
   Receipt,
   Tag,
+  Wallet,
   X,
 } from 'lucide-react';
 import { Logo } from '@estene/ui/Logo';
@@ -31,6 +32,7 @@ const WAREHOUSE: NavItem[] = [
   { label: 'Stock', to: '/stock', icon: Boxes },
   { label: 'Inbound', to: '/inbound', icon: PackagePlus },
   { label: 'Products', to: '/products', icon: Tag },
+  { label: 'Handling fees', to: '/billing', icon: Wallet },
 ];
 
 export function AppLayout() {

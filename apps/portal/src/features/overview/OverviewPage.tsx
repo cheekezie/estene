@@ -10,7 +10,11 @@ import {
   PackagePlus,
   Truck,
 } from 'lucide-react';
+import { cycleLastDay } from '@estene/contracts/handling-fee';
 import type { PortalOverviewDto } from '@estene/contracts/portal';
+import { formatDate } from '@estene/lib/date';
+import { cn } from '@estene/lib/utils';
+import { Card } from '@estene/ui/card';
 import { formatNaira } from '@estene/contracts/money';
 import { Button } from '@estene/ui/button';
 import { api } from '@/lib/api';
@@ -59,6 +63,7 @@ export default function OverviewPage() {
                 highlight={o.outstanding > 0}
               />
             </section>
+            {o.handlingFee && <HandlingFeeCard fee={o.handlingFee} />}
             {o.warehouse && (
               <section>
                 <h2 className="mb-3 font-semibold">Warehouse</h2>
@@ -95,5 +100,56 @@ export default function OverviewPage() {
         )}
       </QueryState>
     </>
+  );
+}
+
+/** Warehouse handling fee: what's owed now and what this month is heading for. */
+function HandlingFeeCard({ fee }: { fee: NonNullable<PortalOverviewDto['handlingFee']> }) {
+  const c = fee.current;
+  const owing = fee.totalDue > 0;
+  return (
+    <Card
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-4 p-5',
+        fee.overdue
+          ? 'border-destructive/40 bg-destructive-soft/40'
+          : owing && 'bg-accent-soft border-amber-300',
+      )}
+    >
+      <div className="flex flex-wrap gap-x-10 gap-y-3">
+        <div>
+          <p className="text-muted-foreground text-sm">Handling fee to pay</p>
+          <p className="font-display tabular mt-1 text-2xl font-bold">
+            {formatNaira(fee.totalDue)}
+          </p>
+          <p
+            className={cn(
+              'mt-0.5 text-xs',
+              fee.overdue ? 'text-destructive font-medium' : 'text-muted-foreground',
+            )}
+          >
+            {fee.overdue
+              ? 'Overdue — please pay now'
+              : fee.nextDueAt
+                ? `Due ${formatDate(fee.nextDueAt)}`
+                : 'All paid up'}
+          </p>
+        </div>
+        {c && (
+          <div>
+            <p className="text-muted-foreground text-sm">This month so far</p>
+            <p className="font-display tabular mt-1 text-2xl font-bold">
+              {c.free ? 'Free' : formatNaira(c.amount)}
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              {c.units.billed} units · ends {formatDate(cycleLastDay(c.periodEnd))}
+            </p>
+          </div>
+        )}
+      </div>
+      <Button asChild variant={owing ? 'primary' : 'outline'}>
+        <Link to="/billing">{owing ? 'Pay now' : 'View handling fees'}</Link>
+      </Button>
+    </Card>
   );
 }

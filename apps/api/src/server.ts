@@ -9,6 +9,7 @@ import { registerNotifications } from './modules/notifications/notifications.lis
 import { registerPayments } from './modules/payments/payments.listeners';
 import { registerPayouts } from './modules/payouts/payouts.listeners';
 import { registerWarehousing } from './modules/warehousing/warehousing.listeners';
+import { registerHandlingFees } from './modules/handling-fees/handling-fees.listeners';
 import { registerWebhooks } from './modules/webhooks/webhooks.listeners';
 
 async function start() {
@@ -22,6 +23,7 @@ async function start() {
   registerPayments();
   registerPayouts();
   registerWarehousing();
+  registerHandlingFees();
 
   const app = await buildApp();
   await app.listen({ port: env.PORT, host: '0.0.0.0' });

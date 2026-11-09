@@ -22,6 +22,8 @@ const envSchema = z.object({
   SEED_ADMIN_PASSWORD: z.string().optional(),
   /** Public website — used for tracking links in SMS and integration payloads. */
   PUBLIC_SITE_URL: z.string().default('http://localhost:3100'),
+  /** Client portal — where clients land after paying a handling fee online. */
+  PORTAL_URL: z.string().default('http://localhost:5500'),
 
   // ── Payments ────────────────────────────────────────────────────────────
   /** One gateway for money in (customer payments) and money out (rider payouts). `simulator` for local work. */

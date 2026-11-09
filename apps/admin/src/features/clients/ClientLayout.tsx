@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useOutletContext, useParams } from 'react-router';
-import { ArrowLeft, Code2, LayoutGrid, Pencil, Plus, Warehouse } from 'lucide-react';
+import { ArrowLeft, Code2, LayoutGrid, Pencil, Plus, Receipt, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { CLIENT_INDUSTRY_LABELS } from '@estene/contracts/client';
 import { cn } from '@estene/lib/utils';
@@ -88,6 +88,7 @@ export default function ClientLayout() {
             <nav className="mb-6 mt-6 flex gap-1 border-b" aria-label="Client sections">
               <Tab to={`/clients/${c.id}`} end icon={LayoutGrid} label="Overview" />
               <Tab to={`/clients/${c.id}/warehousing`} icon={Warehouse} label="Warehousing" />
+              <Tab to={`/clients/${c.id}/handling-fees`} icon={Receipt} label="Handling fees" />
               <Tab to={`/clients/${c.id}/developer`} icon={Code2} label="Developer" />
             </nav>
 

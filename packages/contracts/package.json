@@ -28,6 +28,7 @@
     "./warehouse": "./src/warehouse.ts",
     "./portal": "./src/portal.ts",
     "./upload": "./src/upload.ts",
+    "./handling-fee": "./src/handling-fee.ts",
     "./rider-application": "./src/rider-application.ts"
   },
   "dependencies": {

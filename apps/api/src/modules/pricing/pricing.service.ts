@@ -6,6 +6,7 @@ import {
   type RouteRateInput,
 } from '@estene/contracts/pricing';
 import type { QuoteRequest } from '@estene/contracts/shipment';
+import { DEFAULT_HANDLING_FEE, HandlingFeeSettingsSchema } from '@estene/contracts/handling-fee';
 import { badRequest, notFound } from '../../lib/errors';
 import { ZoneModel } from '../zones/models/zone.model';
 import { PricingConfigModel, type IPricingConfig } from './models/pricing-config.model';
@@ -14,7 +15,7 @@ import { orderedPair, RouteRateModel } from './models/route-rate.model';
 export const PlatformSettingsSchema = PricingConfigSchema.extend({
   partnerCommissionPct: z.number().min(0).max(100),
   maxActiveJobsPerRider: z.number().int().min(1).max(20),
-});
+}).extend(HandlingFeeSettingsSchema.shape);
 export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
 
 // Pricing is read on every quote but changes rarely — a short in-process
@@ -29,8 +30,10 @@ export const PricingService = {
     const doc =
       (await PricingConfigModel.findOne({ key: 'default' }).lean()) ??
       (await PricingConfigModel.create({ key: 'default', ...DEFAULT_PRICING_CONFIG })).toObject();
-    cache = { value: doc, at: Date.now() };
-    return doc;
+    // Configs saved before the handling fee existed get its defaults.
+    const value = { ...DEFAULT_HANDLING_FEE, ...doc };
+    cache = { value, at: Date.now() };
+    return value;
   },
 
   async updateConfig(input: PlatformSettings, adminId: string) {

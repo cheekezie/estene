@@ -96,8 +96,6 @@ export const STOCK_MOVEMENT_LABELS: Record<StockMovementType, string> = {
 export const WarehousingSettingsSchema = z.object({
   enabled: z.boolean(),
   officeId: ObjectIdSchema,
-  /** Flat monthly storage fee in kobo, billed on account on the 1st for the month just ended. */
-  monthlyFee: z.number().int().nonnegative(),
   /** Flag products at or below this available quantity. */
   lowStockThreshold: z.number().int().nonnegative().max(100_000).default(5),
 });
@@ -106,7 +104,6 @@ export type WarehousingSettingsInput = z.infer<typeof WarehousingSettingsSchema>
 export type WarehousingSettingsDto = {
   enabled: boolean;
   office: { id: string; name: string; code: string };
-  monthlyFee: number;
   lowStockThreshold: number;
   enabledAt: string | null;
 };

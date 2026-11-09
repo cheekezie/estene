@@ -47,6 +47,10 @@ const router = createBrowserRouter([
                 path: 'warehousing',
                 ...page(() => import('@/features/clients/ClientWarehousingPage')),
               },
+              {
+                path: 'handling-fees',
+                ...page(() => import('@/features/handling-fees/ClientHandlingFeesPage')),
+              },
             ],
           },
           { path: 'riders', ...page(() => import('@/features/riders/RidersPage')) },

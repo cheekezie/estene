@@ -181,7 +181,9 @@ export const LEDGER_ENTRY_TYPES = [
   'cash_collected', // rider holds customer cash — rider owes us
   'cash_remitted', // rider handed cash back
   'payout', // we paid a partner rider
-  'storage_fee', // monthly warehousing fee billed to a business client
+  'storage_fee', // flat monthly warehousing fee (retired; kept for old statements)
+  'handling_fee', // warehousing handling fee for one billing cycle
+  'fee_waived', // ops waived a billed handling fee — credits the client
   'adjustment',
 ] as const;
 export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];

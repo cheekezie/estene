@@ -2,6 +2,7 @@ import { SHIPMENT_STATUS_META } from '@estene/contracts/shipment-status';
 import { bus } from '../../lib/events';
 import { getQueue, startWorker } from '../../lib/queue';
 import { ClientModel } from '../clients/models/client.model';
+import { HandlingFeeModel } from '../handling-fees/models/handling-fee.model';
 import { OfficeModel } from '../offices/models/office.model';
 import { StockLevelModel } from '../warehousing/models/stock-level.model';
 import { PaymentModel } from '../payments/models/payment.model';
@@ -182,6 +183,26 @@ export function registerNotifications() {
   });
 
   // Warehousing clients hear about low stock on their contact number (the webhook covers integrators).
+  // A billed cycle with something to pay: tell the client's contact what and by when.
+  bus.on('handling_fee.billed', async ({ feeId }) => {
+    const fee = await HandlingFeeModel.findById(feeId).lean();
+    if (fee?.status !== 'due' || !fee.dueAt) return;
+    const client = await ClientModel.findById(fee.client, 'contact.phone status').lean();
+    if (client?.status !== 'active') return;
+    const day = (d: Date) =>
+      d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' });
+    await queueSms({
+      to: client.contact.phone,
+      body: templates.handlingFeeDue(
+        `${day(fee.periodStart)} – ${day(new Date(fee.periodEnd.getTime() - 1))}`,
+        fee.units.billed,
+        fee.amount,
+        day(fee.dueAt),
+      ),
+      template: 'client.handling_fee_due',
+    });
+  });
+
   bus.on('stock.low', async ({ clientId, productId, officeId }) => {
     const [client, level] = await Promise.all([
       ClientModel.findById(clientId, 'contact.phone status').lean(),

@@ -66,7 +66,7 @@ export const FinanceService = {
         type: 'payment_received',
         amount: payment.amount,
         account: 'customer',
-        shipment: payment.shipment,
+        shipment: payment.shipment ?? undefined,
         client: payment.client ?? undefined,
         reference: payment.reference,
         note: payment.channel,
@@ -79,7 +79,7 @@ export const FinanceService = {
         amount: payment.amount,
         account: 'rider',
         rider: payment.collectedBy,
-        shipment: payment.shipment,
+        shipment: payment.shipment ?? undefined,
         reference: payment.reference,
         idempotencyKey: `payment:${paymentId}:cash`,
       });
@@ -87,19 +87,33 @@ export const FinanceService = {
     await post(entries);
   },
 
-  /** Delivered on-account charges and storage fees minus payments received for that client. */
+  /** On-account delivery charges and fees, minus payments and waivers, for one client. */
   async clientOutstanding(clientId: string) {
     const rows = await LedgerEntryModel.aggregate<{ _id: LedgerEntryType; total: number }>([
       {
         $match: {
           client: new Types.ObjectId(clientId),
-          type: { $in: ['shipment_charge', 'storage_fee', 'payment_received'] },
+          type: {
+            $in: [
+              'shipment_charge',
+              'storage_fee',
+              'handling_fee',
+              'fee_waived',
+              'payment_received',
+            ],
+          },
         },
       },
       { $group: { _id: '$type', total: { $sum: '$amount' } } },
     ]);
     const t = Object.fromEntries(rows.map((r) => [r._id, r.total]));
-    return (t.shipment_charge ?? 0) + (t.storage_fee ?? 0) - (t.payment_received ?? 0);
+    return (
+      (t.shipment_charge ?? 0) +
+      (t.storage_fee ?? 0) +
+      (t.handling_fee ?? 0) -
+      (t.fee_waived ?? 0) -
+      (t.payment_received ?? 0)
+    );
   },
 
   /**
@@ -205,18 +219,48 @@ export const FinanceService = {
     ]);
   },
 
-  /** One warehousing client's flat fee for one month (`YYYY-MM`). Safe to re-run. */
-  async recordStorageFee(clientId: string, month: string, amount: number) {
-    if (amount <= 0) return;
+  /** A billed handling-fee cycle. Keyed per fee, so re-running the billing job is safe. */
+  async recordHandlingFee(fee: {
+    id: string;
+    clientId: string;
+    amount: number;
+    reference: string;
+    note: string;
+  }) {
+    if (fee.amount <= 0) return;
     await post([
       {
-        type: 'storage_fee',
-        amount,
+        type: 'handling_fee',
+        amount: fee.amount,
         account: 'customer',
-        client: new Types.ObjectId(clientId),
-        reference: `STORAGE-${month}`,
-        note: `Warehousing fee for ${month}`,
-        idempotencyKey: `storage:${clientId}:${month}`,
+        client: new Types.ObjectId(fee.clientId),
+        reference: fee.reference,
+        note: fee.note,
+        idempotencyKey: `handling:${fee.id}`,
+      },
+    ]);
+  },
+
+  /** Ops waived a billed cycle: a credit that cancels its charge. Append-only, so the charge stays. */
+  async recordFeeWaived(fee: {
+    id: string;
+    clientId: string;
+    amount: number;
+    reference: string;
+    reason: string;
+    adminId: string;
+  }) {
+    if (fee.amount <= 0) return;
+    await post([
+      {
+        type: 'fee_waived',
+        amount: fee.amount,
+        account: 'customer',
+        client: new Types.ObjectId(fee.clientId),
+        reference: fee.reference,
+        note: fee.reason,
+        createdBy: new Types.ObjectId(fee.adminId),
+        idempotencyKey: `handling:${fee.id}:waived`,
       },
     ]);
   },
